@@ -8,7 +8,7 @@ transcriptomics:
   normalization: tpm
   batch_correction: combat
   min_count: 10
-  min_samples_expressed: 0.1
+  min_samples_expressed_fraction: 0.1
 
 epigenomics:
   min_coverage: 10
