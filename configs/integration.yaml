@@ -1,0 +1,19 @@
+mofa:
+  n_factors: 20
+  max_iter: 1000
+  convergence_mode: "fast"
+  use_gpu: false
+
+snf:
+  k_neighbors: 20
+  mu: 0.5
+  t_iterations: 20
+  n_clusters: 4
+
+ensemble:
+  base_models: [xgboost_genomics, xgboost_transcriptomics, xgboost_proteomics,
+                xgboost_metabolomics, xgboost_microbiome, xgboost_environmental,
+                xgboost_epigenomics, xgboost_clinical]
+  meta_model: xgboost
+  cv_folds: 5
+  top_features_per_modality: 20

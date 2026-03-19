@@ -1,0 +1,32 @@
+model:
+  name: "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
+  load_in_4bit: true
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_quant_type: "nf4"
+  use_nested_quant: true
+
+lora:
+  r: 16
+  lora_alpha: 32
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  lora_dropout: 0.05
+  bias: none
+  task_type: CAUSAL_LM
+
+training:
+  output_dir: "models/mistral-pd-multiomics"
+  num_train_epochs: 3
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  learning_rate: 2.0e-4
+  warmup_ratio: 0.03
+  lr_scheduler_type: cosine
+  save_steps: 500
+  logging_steps: 50
+  max_seq_length: 4096
+  dataset_split: [0.8, 0.1, 0.1]
+  seed: 42
+
+hub:
+  push_to_hub: false
+  hub_model_id: "pluma-parkinsons-ai/mistral-pd-multiomics-qlora"

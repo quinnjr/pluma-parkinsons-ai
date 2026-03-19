@@ -1,0 +1,37 @@
+genomics:
+  maf_threshold: 0.01
+  ld_window: 1000
+  ld_r2: 0.1
+  known_pd_genes: [LRRK2, GBA, SNCA, PINK1, PRKN, PARK7, VPS35, CHCHD2]
+
+transcriptomics:
+  normalization: tpm
+  batch_correction: combat
+  min_count: 10
+  min_samples_expressed: 0.1
+
+epigenomics:
+  min_coverage: 10
+  beta_threshold: 0.1
+
+proteomics:
+  log_transform: log2
+  imputation: knn
+  n_neighbors: 5
+
+metabolomics:
+  transform: clr
+  min_detection_rate: 0.5
+
+microbiome:
+  rarefaction_depth: 10000
+  transform: clr
+  taxonomy_level: genus
+
+environmental:
+  exposure_window_years: 5
+  air_quality_metrics: [pm25, pm10, no2, ozone]
+
+clinical:
+  updrs_subscales: [updrs_i, updrs_ii, updrs_iii, updrs_iv, updrs_total]
+  staging: hoehn_yahr

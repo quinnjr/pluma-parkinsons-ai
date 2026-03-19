@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv*/
+data/raw/
+data/processed/
+data/integrated/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+docs/plans/
+*.ckpt
+*.safetensors
+wandb/
+models/

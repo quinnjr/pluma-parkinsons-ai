@@ -1,0 +1,22 @@
+ppmi:
+  base_url: "https://ida.loni.usc.edu/download/files"
+  data_dir: "data/raw/ppmi"
+  modalities: [genomics, transcriptomics, proteomics, metabolomics, microbiome, clinical]
+
+geo:
+  data_dir: "data/raw/geo"
+  pd_search_terms:
+    - "Parkinson's disease RNA-seq"
+    - "Parkinson methylation"
+    - "Parkinson microbiome 16S"
+  max_results: 50
+
+environmental:
+  epa_aqs:
+    base_url: "https://aqs.epa.gov/data/api"
+    data_dir: "data/raw/epa"
+  usgs_pesticides:
+    data_dir: "data/raw/usgs"
+  nhanes:
+    data_dir: "data/raw/nhanes"
+    cycles: ["2017-2018", "2019-2020"]
