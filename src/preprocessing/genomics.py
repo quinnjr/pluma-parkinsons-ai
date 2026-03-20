@@ -8,7 +8,7 @@ class GenomicsPreprocessor:
     def __init__(self, maf_threshold: float = 0.01,
                  known_pd_genes: list[str] | None = None):
         self.maf_threshold = maf_threshold
-        self.known_pd_genes = set(known_pd_genes) if known_pd_genes is not None else set()
+        self.known_pd_genes = set(known_pd_genes) if known_pd_genes is not None else set(DEFAULT_PD_GENES)
 
     def filter_by_maf(self, df: pd.DataFrame) -> pd.DataFrame:
         """Remove rare variants unless they are in known PD causal genes."""

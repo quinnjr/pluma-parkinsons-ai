@@ -15,7 +15,11 @@ def sample_variant_df():
     })
 
 def test_maf_filter_removes_rare_variants(sample_variant_df):
-    proc = GenomicsPreprocessor(maf_threshold=0.01)
+    # rs34637584 is LRRK2 (a known PD gene) with MAF=0.001.  The default
+    # whitelist keeps it, so the variant that should be dropped by MAF alone
+    # must be a gene NOT in DEFAULT_PD_GENES.  Verify a non-PD-gene rare
+    # variant is removed while known-PD-gene rare variants survive.
+    proc = GenomicsPreprocessor(maf_threshold=0.01, known_pd_genes=[])
     filtered = proc.filter_by_maf(sample_variant_df)
     assert "rs34637584" not in filtered["variant_id"].values
     assert len(filtered) == 3
@@ -42,3 +46,17 @@ def test_preprocess_pipeline(sample_variant_df):
     matrix = proc.preprocess(sample_variant_df)
     assert isinstance(matrix, pd.DataFrame)
     assert matrix.index.name == "subject_id"
+
+def test_default_constructor_uses_pd_gene_whitelist():
+    """GenomicsPreprocessor() with no args should protect known PD genes."""
+    proc = GenomicsPreprocessor(maf_threshold=0.01)  # no known_pd_genes arg
+    df = pd.DataFrame({
+        "variant_id": ["rs34637584"],
+        "gene": ["LRRK2"],
+        "genotype": [1],
+        "maf": [0.001],  # below threshold
+        "subject_id": ["PD_001"],
+    })
+    filtered = proc.filter_by_maf(df)
+    # LRRK2 variant should be KEPT despite low MAF because LRRK2 is in DEFAULT_PD_GENES
+    assert "rs34637584" in filtered["variant_id"].values
