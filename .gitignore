@@ -12,3 +12,12 @@ docs/plans/
 *.safetensors
 wandb/
 models/
+.env
+.env.*
+*.log
+logs/
+notebooks/.ipynb_checkpoints/
+htmlcov/
+*.bin
+outputs/
+runs/

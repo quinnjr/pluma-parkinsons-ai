@@ -1,7 +1,7 @@
 ppmi:
   base_url: "https://ida.loni.usc.edu/download/files"
   data_dir: "data/raw/ppmi"
-  modalities: [genomics, transcriptomics, proteomics, metabolomics, microbiome, clinical]
+  modalities: [genomics, transcriptomics, epigenomics, proteomics, metabolomics, microbiome, clinical]
 
 geo:
   data_dir: "data/raw/geo"
