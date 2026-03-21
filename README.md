@@ -31,13 +31,28 @@ pip install -e ".[training]"
 | Environmental | EPA AQS, USGS pesticide maps, CDC NHANES, NIH NTP |
 | Clinical/Phenotypic | PPMI clinical, OpenNeuro, PhysioNet |
 
-### PPMI Registration (Required)
+### Data Access Requirements
 
-PPMI data requires free registration at **https://www.ppmi-info.org/access-data-specimens/download-data**
+Some sources require registration before data can be downloaded. The table below lists what is needed and where to sign up.
 
-After registering, download Demographics, genomics, proteomics, metabolomics, microbiome, and clinical CSVs and place them in `data/raw/ppmi/`.
+#### Requires registration
 
-All other data sources are downloaded automatically.
+| Source | Cost | Approval time | Instructions |
+|--------|------|---------------|--------------|
+| **PPMI** | Free | 1–3 business days | Create an account at [ppmi-info.org](https://www.ppmi-info.org/access-data-specimens/download-data), agree to the Data Use Agreement, then download Demographics, genomics, proteomics, metabolomics, microbiome, and clinical CSVs into `data/raw/ppmi/`. |
+| **EPA AQS API** | Free | Same day (email) | Submit a key request at [aqs.epa.gov](https://aqs.epa.gov/aqsweb/documents/data_api.html#signup). Set the returned key as `EPA_AQS_KEY` in `.env`. |
+| **GP2** | Free | Variable | Register at [gp2.org](https://gp2.org) and request access to the genotyping dataset. |
+| **dbGaP** | Free | Weeks–months (NIH review) | Create an [eRA Commons account](https://public.era.nih.gov/commons/), then submit a controlled-access request for each study of interest at [dbgap.ncbi.nlm.nih.gov](https://dbgap.ncbi.nlm.nih.gov). |
+| **UK Biobank** | Fee per project | Weeks–months | Apply at [ukbiobank.ac.uk](https://www.ukbiobank.ac.uk/enable-your-research/apply-for-access). |
+| **PhysioNet** (some datasets) | Free | Days | Register at [physionet.org](https://physionet.org) and complete credentialing for datasets that require it. |
+
+#### No credentials needed
+
+GEO, NHANES, GWAS Catalog, ENCODE, Roadmap Epigenomics, Human Protein Atlas, PRIDE Archive, MetaboLights, HMDB, EBI Metagenomics (MGnify), OpenNeuro, Allen Brain Atlas, and USGS pesticide maps are all downloaded automatically with no sign-up.
+
+#### Priority
+
+For a first training run, **PPMI** is the most important — it provides longitudinal multi-omics from the same subjects across all modalities. The **EPA AQS key** is quick to obtain and improves environmental exposure coverage. Everything else is optional for an initial run.
 
 ## Running the Pipeline
 
