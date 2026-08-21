@@ -97,8 +97,12 @@ class BiomarkerHit:
 
     @property
     def observed_direction(self) -> str | None:
-        """``"up"``/``"down"`` for the measurement itself, or ``None`` if unknown."""
-        if self.value_z is None:
+        """``"up"``/``"down"`` for the measurement itself, or ``None`` if unknown.
+
+        A z of exactly 0 has no direction; calling it "down" would assert an
+        observation that was not made.
+        """
+        if self.value_z is None or self.value_z == 0:
             return None
         return "up" if self.value_z > 0 else "down"
 

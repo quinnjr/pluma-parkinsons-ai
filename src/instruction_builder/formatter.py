@@ -44,7 +44,7 @@ class GroundedHit:
     @property
     def concordance(self) -> str:
         """Does the subject's observed value move the way the literature reports?"""
-        if not self.is_annotated or self.value_z is None:
+        if not self.is_annotated or self.value_z is None or self.value_z == 0:
             return UNDETERMINED
         expected = self.entity.pd_association.direction
         if expected not in {"up", "down"}:
@@ -72,6 +72,8 @@ def _push(hit: GroundedHit) -> str:
 def _value_phrase(hit: GroundedHit) -> str:
     if hit.value_z is None:
         return "the subject's value was not standardised against the cohort"
+    if hit.value_z == 0:
+        return "the subject's value sits at the cohort mean (z = +0.00)"
     level = "elevated" if hit.value_z > 0 else "reduced"
     return f"the subject's value is {level} relative to the cohort (z = {hit.value_z:+.2f})"
 
@@ -88,7 +90,7 @@ class InstructionFormatter:
     # -- grounding -------------------------------------------------------------
 
     def ground(self, output: Stage1Output, limit: int | None = None) -> list[GroundedHit]:
-        hits = output.top_biomarkers[: limit or self.top_n]
+        hits = output.top_biomarkers[: self.top_n if limit is None else limit]
         return [
             GroundedHit(
                 modality=hit.modality,
@@ -104,10 +106,17 @@ class InstructionFormatter:
     # -- shared blocks ---------------------------------------------------------
 
     def _format_profile(self, output: Stage1Output) -> str:
+        # The recorded diagnosis is deliberately absent: with the label in the
+        # prompt, the prediction task is solvable by copying a token, and the
+        # trained model learns nothing about reading the evidence.
+        env_note = (
+            " (cohort-level exposure distribution, not a subject measurement)"
+            if "environmental" in output.provenance.synthetic_modalities
+            else ""
+        )
         lines = [
             f"Subject: {output.subject_id}",
-            f"Recorded diagnosis: {output.diagnosis}",
-            f"Environmental risk score: {output.environmental_risk_score:.1f}/10",
+            f"Environmental risk score: {output.environmental_risk_score:.1f}/10{env_note}",
             "",
             "Top biomarkers by |SHAP| (XGBoost + TreeSHAP):",
         ]
@@ -137,7 +146,12 @@ class InstructionFormatter:
         if prov.synthetic_modalities:
             lines.append(f"  - simulated modalities: {', '.join(prov.synthetic_modalities)}")
         if prov.cv_auc is not None:
-            lines.append(f"  - cross-validated ROC AUC: {prov.cv_auc:.2f}")
+            auc_note = (
+                " (inflated: simulated modalities carry label-dependent effects)"
+                if prov.synthetic_modalities
+                else ""
+            )
+            lines.append(f"  - cross-validated ROC AUC: {prov.cv_auc:.2f}{auc_note}")
         return "\n".join(lines)
 
     def _caveats(self, output: Stage1Output, grounded: list[GroundedHit]) -> list[str]:
@@ -159,12 +173,13 @@ class InstructionFormatter:
                 f"The classifier's cross-validated ROC AUC is {prov.cv_auc:.2f}, so its "
                 f"per-subject attributions rest on weak discrimination."
             )
-        simulated = [m for m in prov.synthetic_modalities if m in {h.modality for h in grounded}]
-        if simulated:
+        if prov.synthetic_modalities:
             caveats.append(
                 f"Values for the following modalities were simulated, not measured: "
-                f"{', '.join(sorted(set(simulated)))}. No biological conclusion about this "
-                f"subject can rest on them."
+                f"{', '.join(sorted(set(prov.synthetic_modalities)))}. No biological "
+                f"conclusion about this subject can rest on them, and because the "
+                f"simulation shifts curated features by diagnosis, any classifier "
+                f"performance figure is inflated by construction."
             )
         unannotated = [h for h in grounded if not h.is_annotated]
         if unannotated:
@@ -195,6 +210,21 @@ class InstructionFormatter:
                 "citation-backed PD association."
             )
         return "\n\n".join(sections)
+
+    def _finish(self, task: str, output: Stage1Output, body: list[str]) -> dict:
+        """Assemble the pair, grounding caveats and references over the FULL profile.
+
+        The task bodies discuss only their top-N hits, but the prompt lists every
+        top biomarker. Computing "References: none" or "N features have no curated
+        annotation" from the truncated set produced statements that were false of
+        the profile the model was actually shown.
+        """
+        profile_grounded = self.ground(output, limit=len(output.top_biomarkers))
+        return self._pair(
+            task, output, profile_grounded,
+            self._render(body, self._caveats(output, profile_grounded),
+                         self._references(profile_grounded)),
+        )
 
     def _pair(self, task: str, output: Stage1Output, grounded: list[GroundedHit],
               response: str) -> dict:
@@ -243,9 +273,7 @@ class InstructionFormatter:
                         "here is a statistical association only."
                     )
             body.append("")
-        return self._pair("biomarker_discovery", output, grounded,
-                          self._render(body, self._caveats(output, grounded),
-                                       self._references(grounded)))
+        return self._finish("biomarker_discovery", output, body)
 
     def _concordance_sentence(self, hit: GroundedHit) -> str:
         expected = hit.entity.pd_association.direction
@@ -263,6 +291,11 @@ class InstructionFormatter:
             )
         if hit.value_z is None:
             return "no standardised value is available, so concordance cannot be assessed."
+        if hit.value_z == 0:
+            return (
+                "the subject sits at the cohort mean for this feature, so no observed "
+                "direction exists to compare against the literature."
+            )
         return (
             f"the reported direction in PD is '{expected}', which does not define a single "
             f"expected sign, so concordance cannot be assessed."
@@ -271,14 +304,17 @@ class InstructionFormatter:
     def clinical_prediction(self, output: Stage1Output) -> dict:
         grounded = self.ground(output, limit=3)
         confidence = output.prediction_confidence * 100
-        stage = f", staged {output.disease_stage}" if output.disease_stage else ""
+        # The reported call must be what the classifier said, derived from its
+        # probability — never the recorded label, which for a misclassified
+        # subject would put a prediction in the target the model never made.
+        predicted = "PD" if output.prediction_confidence >= 0.5 else "HC"
         supporting = [h for h in grounded if h.pushes_toward_pd]
         opposing = [h for h in grounded if not h.pushes_toward_pd]
 
         body = [
-            f"Model output: {output.diagnosis}{stage}, at {confidence:.1f}% predicted "
+            f"Model output: {predicted}, at {confidence:.1f}% predicted "
             f"probability of PD. This is a classifier output on research data, not a "
-            f"clinical diagnosis.",
+            f"clinical diagnosis, and it does not stage disease.",
             "",
         ]
         if supporting:
@@ -309,9 +345,7 @@ class InstructionFormatter:
             "To raise confidence: replicate in an independent cohort, confirm the "
             "attributions out of fold, and measure any simulated modality directly."
         )
-        return self._pair("clinical_prediction", output, grounded,
-                          self._render(body, self._caveats(output, grounded),
-                                       self._references(grounded)))
+        return self._finish("clinical_prediction", output, body)
 
     def _evidence_line(self, hit: GroundedHit) -> str:
         base = f"{hit.feature} [{hit.modality}], SHAP {hit.shap_value:+.3f}; {_value_phrase(hit)}"
@@ -384,9 +418,7 @@ class InstructionFormatter:
                 + ", ".join(f"{h.feature} [{h.modality}]" for h in unannotated)
                 + "."
             )
-        return self._pair("cross_modal_synthesis", output, grounded,
-                          self._render(body, self._caveats(output, grounded),
-                                       self._references(grounded)))
+        return self._finish("cross_modal_synthesis", output, body)
 
     def all_formats(self, output: Stage1Output) -> list[dict]:
         return [

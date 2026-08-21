@@ -274,6 +274,9 @@ class Pipeline:
         ]
         X = pd.concat(blocks + [factors.rename(columns=lambda c: f"integrated:{c}")], axis=1)
         X.columns = [str(c) for c in X.columns]
+        # Align explicitly: concat/MOFA make no ordering promise, and the
+        # ensemble fits positionally (it refuses mismatched indices).
+        X = X.loc[subjects]
         y = pd.Series(manifest["diagnosis"].values, index=subjects)
 
         ensemble_cfg = self.int_cfg["ensemble"]

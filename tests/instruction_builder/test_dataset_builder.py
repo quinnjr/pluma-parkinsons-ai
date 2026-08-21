@@ -88,3 +88,10 @@ def test_save_round_trips_jsonl(outputs, tmp_path):
         assert len(records) == len(splits[name])
     train = load_jsonl(tmp_path / "train.jsonl")
     assert {"instruction", "input", "output", "grounding"} <= set(train[0])
+
+
+def test_fewer_than_three_subjects_raises():
+    outputs = [_make_output("S_0", "PD"), _make_output("S_1", "HC")]
+    builder = DatasetBuilder(seed=1)
+    with pytest.raises(ValueError, match="at least 3 subjects"):
+        builder.split(builder.build_pairs(outputs))

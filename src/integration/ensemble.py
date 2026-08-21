@@ -68,9 +68,27 @@ class OmicsEnsemble:
         )
 
     def encode_labels(self, y: pd.Series) -> pd.Series:
-        return y.map(self.LABEL_MAP).fillna(0).astype(int)
+        unknown = sorted(set(y.dropna().unique()) - set(self.LABEL_MAP))
+        if unknown or y.isna().any():
+            # fillna(0) here would silently miscode typos and missing rows as
+            # controls and change every downstream number.
+            raise ValueError(
+                f"unrecognised diagnosis labels: {unknown or ['<NaN>']}; "
+                f"expected one of {sorted(self.LABEL_MAP)}"
+            )
+        return y.map(self.LABEL_MAP).astype(int)
+
+    @staticmethod
+    def _check_alignment(X: pd.DataFrame, y: pd.Series) -> None:
+        """Fitting is positional; a scrambled index would scramble labels silently."""
+        if not X.index.equals(y.index):
+            raise ValueError(
+                "X and y must share an identical index, in the same order; "
+                f"got {len(X)} feature rows vs {len(y)} labels"
+            )
 
     def fit(self, X: pd.DataFrame, y: pd.Series) -> None:
+        self._check_alignment(X, y)
         self._feature_names = [str(c) for c in X.columns]
         self.model.fit(X.values, self.encode_labels(y).values)
 
@@ -104,6 +122,7 @@ class OmicsEnsemble:
         at least two folds (fewer than two subjects in the minority class). The
         fallback is flagged, never silent.
         """
+        self._check_alignment(X, y)
         self._feature_names = [str(c) for c in X.columns]
         y_binary = self.encode_labels(y)
         splits = self.usable_splits(y, n_splits)

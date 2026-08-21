@@ -115,18 +115,28 @@ def compute_metrics(
         raise ValueError(f"got {len(records)} records but {len(predictions)} predictions")
 
     audits = [audit_citations(p, kb) for p in predictions]
+    total_cited = sum(len(a.cited) for a in audits)
+    total_hallucinated = sum(len(a.hallucinated) for a in audits)
     metrics = {
         "n_samples": len(predictions),
         "token_f1": _mean(token_f1(p, r) for p, r in zip(predictions, references)),
         "citation_hallucination_rate": _mean(a.hallucination_rate for a in audits),
+        # The macro rate above scores a response that cites nothing as a perfect
+        # 0.0, so a model that stops citing gets a perfect score. The micro rate
+        # over all cited PMIDs is not gameable that way; read the two together
+        # with responses_with_citations.
+        "citation_hallucination_rate_micro": (
+            total_hallucinated / total_cited if total_cited else 0.0
+        ),
         "responses_with_citations": _mean(1.0 if a.cited else 0.0 for a in audits),
     }
 
     expected = [(record.get("grounding") or {}).get("annotated_features") for record in records]
-    if any(e for e in expected):
-        metrics["biomarker_recall"] = _mean(
-            biomarker_recall(p, e or []) for p, e in zip(predictions, expected)
-        )
+    # Only score recall where there was something to recall; averaging in 0.0
+    # for profiles with no annotated features reads as failure where none exists.
+    scorable = [(p, e) for p, e in zip(predictions, expected) if e]
+    if scorable:
+        metrics["biomarker_recall"] = _mean(biomarker_recall(p, e) for p, e in scorable)
 
     diagnosis_pairs = [
         (extract_diagnosis(p), extract_diagnosis(r))

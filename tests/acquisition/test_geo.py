@@ -38,3 +38,20 @@ def test_filter_is_case_insensitive():
     client = GEOClient(data_dir="data/raw/geo")
     filtered = client.filter_pd_studies(studies)
     assert len(filtered) == 1
+
+
+def test_collapse_to_genes_handles_duplicate_probe_ids():
+    import pandas as pd
+
+    from src.acquisition.geo import GEOClient
+
+    expr = pd.DataFrame(
+        [[1.0, 2.0], [5.0, 9.0], [3.0, 3.1]],
+        index=["p1", "p1", "p2"],
+        columns=["s1", "s2"],
+    )
+    collapsed = GEOClient.collapse_to_genes(expr, {"p1": "GENE_A", "p2": "GENE_B"})
+    assert list(collapsed.index) == ["GENE_B", "GENE_A"] or \
+           sorted(collapsed.index) == ["GENE_A", "GENE_B"]
+    # The first p1 row is kept; the duplicate must not cartesian-expand.
+    assert collapsed.loc["GENE_A"].tolist() == [1.0, 2.0]

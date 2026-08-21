@@ -134,6 +134,11 @@ Each uses seeded randomized instruction variants from `templates.py`. Prompts ar
 
 - **SNF integration:** `src/integration/snf.py` exists and has a config block, but is not exercised by the pipeline or smoke test and has no tests. Treat it as experimental.
 - **PPMI/EPA acquisition:** clients exist but the default pipeline path only downloads GEO + NHANES; PPMI requires registered credentials (see README).
+- **Transductive feature construction:** MOFA+ factors, top-variable-gene selection, and the cohort z-scores are fit on the full cohort before the ensemble's CV split. The leak is unsupervised (no labels) but means `out_of_fold=True` guarantees honest *label* handling only, not fully out-of-sample features.
+- **Synthetic-modality label dependence:** `synthetic.py` shifts curated features by diagnosis, so any run with simulated modalities has an inflated CV AUC by construction. The generated text now states this (profile AUC qualifier + always-on caveat); the number itself is still not a performance estimate.
+- **Citation audit scope:** `audit_citations` checks that a cited PMID exists in the KB, not that it is attached to the right entity or claim. Entity-level attachment checking is future work; read `citation_hallucination_rate_micro` together with `responses_with_citations`.
+- **Environmental risk score:** NHANES values are assigned to cohort subjects by position (a distribution, not a measurement); the pipeline flags `environmental` as simulated and the prompt line carries a qualifier, but the score is still a single unqualified float in `Stage1Output`.
+- **`train.py` GPU path untested:** requires `[training]` extras and a GPU; `bf16=True` is hardcoded (pre-Ampere cards will fail). The TRL 1.10 kwargs (`SFTTrainer(quantization_config=...)`, `SFTConfig(max_length/packing/completion_only_loss)`) were verified against TRL 1.10 source, not by execution.
 
 ## No Relationship to PluMA Plugin Runtime
 

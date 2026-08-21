@@ -55,7 +55,10 @@ class Stage1Builder:
         outputs = []
         for i, subject_id in enumerate(X.index):
             shap_row = fit.shap_values[i]
-            top_idx = np.argsort(np.abs(shap_row))[::-1][: self.top_k_biomarkers]
+            # A feature with an attribution of exactly 0 pushed the classifier
+            # nowhere; reporting a direction for it would be an invention.
+            ranked = [j for j in np.argsort(np.abs(shap_row))[::-1] if shap_row[j] != 0]
+            top_idx = ranked[: self.top_k_biomarkers]
             top_biomarkers = [
                 BiomarkerHit(
                     modality=self.infer_modality(fit.feature_names[j]),

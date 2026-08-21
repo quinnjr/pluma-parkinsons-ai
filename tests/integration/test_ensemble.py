@@ -30,8 +30,24 @@ def test_ensemble_fit_shape_validation():
 
 def test_encode_labels_maps_non_pd_to_zero():
     ens = OmicsEnsemble()
-    y = pd.Series(["PD", "HC", "SWEDD", "Prodromal", "???"])
-    assert ens.encode_labels(y).tolist() == [1, 0, 0, 0, 0]
+    y = pd.Series(["PD", "HC", "SWEDD", "Prodromal"])
+    assert ens.encode_labels(y).tolist() == [1, 0, 0, 0]
+
+
+def test_encode_labels_rejects_unknown_and_missing():
+    ens = OmicsEnsemble()
+    with pytest.raises(ValueError, match="unrecognised"):
+        ens.encode_labels(pd.Series(["PD", "parkinsons"]))
+    with pytest.raises(ValueError, match="unrecognised"):
+        ens.encode_labels(pd.Series(["PD", None]))
+
+
+def test_fit_rejects_misaligned_indices():
+    X, y = _cohort(n_per_class=5)
+    shuffled = y.sample(frac=1.0, random_state=1)
+    assert list(shuffled.index) != list(X.index)
+    with pytest.raises(ValueError, match="identical index"):
+        OmicsEnsemble(n_estimators=5).fit_evaluate(X, shuffled)
 
 
 def test_usable_splits():

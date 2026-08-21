@@ -47,3 +47,8 @@ def test_stage1_output_roundtrip():
     restored = Stage1Output.from_dict(data)
     assert restored.subject_id == output.subject_id
     assert restored.prediction_confidence == output.prediction_confidence
+
+def test_observed_direction_zero_z_is_none():
+    hit = BiomarkerHit(modality="genomics", feature="LRRK2", shap_value=0.1,
+                       effect="toward_pd", value_z=0.0)
+    assert hit.observed_direction is None

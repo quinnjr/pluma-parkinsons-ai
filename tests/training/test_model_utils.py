@@ -119,6 +119,7 @@ def test_compute_metrics_aggregates(kb):
     metrics = compute_metrics(predictions, references, records, knowledge_base=kb)
     assert metrics["n_samples"] == 2
     assert metrics["citation_hallucination_rate"] == pytest.approx(0.5)
+    assert metrics["citation_hallucination_rate_micro"] == pytest.approx(0.5)
     assert metrics["responses_with_citations"] == 1.0
     assert metrics["biomarker_recall"] == 1.0
     assert metrics["diagnosis_accuracy"] == 1.0
@@ -130,3 +131,22 @@ def test_compute_metrics_diagnosis_only_on_prediction_task(kb):
     metrics = compute_metrics(["Model output: PD"], ["Model output: HC"], records,
                               knowledge_base=kb)
     assert "diagnosis_accuracy" not in metrics
+
+
+def test_micro_rate_not_gameable_by_abstaining(kb):
+    # One response cites a fake PMID; the other cites nothing. The macro rate
+    # halves; the micro rate over all cited PMIDs does not.
+    predictions = ["Invented [PMID:9999999].", "No citations here."]
+    metrics = compute_metrics(predictions, ["a", "b"], knowledge_base=kb)
+    assert metrics["citation_hallucination_rate"] == pytest.approx(0.5)
+    assert metrics["citation_hallucination_rate_micro"] == 1.0
+
+
+def test_biomarker_recall_skips_records_with_nothing_to_recall(kb):
+    records = [
+        {"grounding": {"annotated_features": ["LRRK2"]}},
+        {"grounding": {"annotated_features": []}},
+    ]
+    metrics = compute_metrics(["LRRK2 found", "nothing"], ["r1", "r2"], records,
+                              knowledge_base=kb)
+    assert metrics["biomarker_recall"] == 1.0

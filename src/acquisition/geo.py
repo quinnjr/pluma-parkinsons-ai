@@ -111,6 +111,10 @@ class GEOClient:
         """
         import pandas as pd
 
+        if not expr.index.is_unique:
+            # .loc on a duplicated label returns every matching row, which
+            # would misalign the probe->symbol pairing below.
+            expr = expr[~expr.index.duplicated(keep="first")]
         symbols = pd.Series({p: mapping[p] for p in expr.index if p in mapping})
         if symbols.empty:
             return expr.iloc[0:0]

@@ -152,12 +152,27 @@ def test_discordant_hit_is_flagged_in_text(formatter, sample_output):
     assert "opposite" in output
 
 
-def test_clinical_prediction_reports_diagnosis_and_confidence(formatter, sample_output):
+def test_clinical_prediction_reports_the_models_call(formatter, sample_output):
     output = formatter.clinical_prediction(sample_output)["output"]
     assert "Model output: PD" in output
-    assert "early" in output
     assert "91.0%" in output
     assert "not a clinical diagnosis" in output
+
+
+def test_clinical_prediction_never_reports_the_label(formatter, sample_output):
+    # A PD-labelled subject the classifier scored at 0.08 must be reported as
+    # the classifier's HC call, not the recorded diagnosis.
+    import dataclasses
+    misclassified = dataclasses.replace(sample_output, prediction_confidence=0.08)
+    output = formatter.clinical_prediction(misclassified)["output"]
+    assert "Model output: HC" in output
+    assert "8.0%" in output
+
+
+def test_recorded_diagnosis_is_not_in_the_prompt(formatter, sample_output):
+    for pair in formatter.all_formats(sample_output):
+        assert "Recorded diagnosis" not in pair["input"]
+        assert "diagnosis: PD" not in pair["input"]
 
 
 def test_cross_modal_synthesis_excludes_unannotated(formatter, sample_output):
@@ -190,6 +205,68 @@ def test_all_formats_returns_three_tasks(formatter, sample_output):
     assert {p["task"] for p in pairs} == {
         "biomarker_discovery", "clinical_prediction", "cross_modal_synthesis"
     }
+
+
+def test_references_cover_the_full_profile_not_the_task_cutoff(kb):
+    # 5 unannotated features rank above the one annotated (LRRK2, 6th). The
+    # clinical task discusses only the top 3, but the prompt lists all 6, so
+    # claiming "References: none" would be false of what the model sees.
+    hits = [
+        BiomarkerHit("transcriptomics", f"PROBE_{i}_at", 0.9 - i * 0.1, "toward_pd")
+        for i in range(5)
+    ] + [BiomarkerHit("genomics", "LRRK2", 0.05, "toward_pd", value_z=1.0)]
+    output = Stage1Output(
+        subject_id="PD_002",
+        diagnosis="PD",
+        prediction_confidence=0.8,
+        disease_stage=None,
+        top_biomarkers=hits,
+        mofa_factors={},
+        environmental_risk_score=3.0,
+    )
+    formatter = InstructionFormatter(seed=0, knowledge_base=kb)
+    pair = formatter.clinical_prediction(output)
+    assert "References: none" not in pair["output"]
+    assert "PMID:1111111" in pair["output"]
+    assert "5 of the 6 features listed have no curated" in pair["output"]
+    assert pair["grounding"]["annotated_features"] == ["LRRK2"]
+
+
+def test_synthetic_caveat_fires_even_when_no_synthetic_feature_ranks(kb):
+    output = Stage1Output(
+        subject_id="PD_003",
+        diagnosis="PD",
+        prediction_confidence=0.9,
+        disease_stage=None,
+        top_biomarkers=[BiomarkerHit("genomics", "LRRK2", 0.3, "toward_pd")],
+        mofa_factors={},
+        environmental_risk_score=2.0,
+        provenance=Provenance(cohort_size=200, shap_out_of_fold=True,
+                              synthetic_modalities=("metabolomics",), cv_auc=0.97),
+    )
+    formatter = InstructionFormatter(seed=0, knowledge_base=kb)
+    pair = formatter.biomarker_discovery(output)
+    assert "simulated, not measured" in pair["output"]
+    assert "inflated" in pair["output"]
+    assert "inflated" in pair["input"]  # the AUC line carries the qualifier too
+
+
+def test_zero_z_gets_no_direction(kb):
+    output = Stage1Output(
+        subject_id="PD_004",
+        diagnosis="PD",
+        prediction_confidence=0.9,
+        disease_stage=None,
+        top_biomarkers=[BiomarkerHit("genomics", "LRRK2", 0.3, "toward_pd", value_z=0.0)],
+        mofa_factors={},
+        environmental_risk_score=2.0,
+    )
+    formatter = InstructionFormatter(seed=0, knowledge_base=kb)
+    grounded = formatter.ground(output)
+    assert grounded[0].concordance == "undetermined"
+    text = formatter.biomarker_discovery(output)["output"]
+    assert "cohort mean" in text
+    assert "reduced" not in text
 
 
 def test_instruction_choice_is_seeded(kb, sample_output):

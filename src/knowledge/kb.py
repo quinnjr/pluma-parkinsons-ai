@@ -33,6 +33,11 @@ _AFFIXES = (
 
 _VALID_DIRECTIONS = {"up", "down", "variable"}
 
+#: HGNC suffixes that turn a gene symbol into a *different* gene: antisense
+#: transcripts (-AS1), divergent transcripts (-DT), intronic transcripts (-IT1),
+#: opposite-strand (-OS). ``SNCA-AS1`` must not inherit SNCA's PD annotation.
+_DISTINCT_LOCUS_SUFFIXES = {"as", "as1", "as2", "as3", "dt", "it1", "os"}
+
 
 @dataclass(frozen=True)
 class Citation:
@@ -126,7 +131,7 @@ class KnowledgeBase:
         if not haystack:
             return None
         for alias_tokens, entity in self._alias_index:
-            if not _contains_run(haystack, alias_tokens):
+            if not _matches(haystack, alias_tokens):
                 continue
             if modality and entity.modalities and modality not in entity.modalities:
                 continue
@@ -137,10 +142,18 @@ class KnowledgeBase:
         return [e for e in self.entities if modality in e.modalities]
 
 
-def _contains_run(haystack: list[str], needle: list[str]) -> bool:
-    """True if ``needle`` appears as a contiguous token run inside ``haystack``."""
+def _matches(haystack: list[str], needle: list[str]) -> bool:
+    """True if ``needle`` appears as a contiguous token run inside ``haystack``,
+    and the run is not immediately followed by a distinct-locus suffix."""
     n = len(needle)
-    return any(haystack[i : i + n] == needle for i in range(len(haystack) - n + 1))
+    for i in range(len(haystack) - n + 1):
+        if haystack[i : i + n] != needle:
+            continue
+        following = haystack[i + n] if i + n < len(haystack) else None
+        if following in _DISTINCT_LOCUS_SUFFIXES:
+            continue
+        return True
+    return False
 
 
 def _load_citations(path: Path) -> dict[str, Citation]:

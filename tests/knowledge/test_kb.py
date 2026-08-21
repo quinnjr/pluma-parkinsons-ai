@@ -164,3 +164,12 @@ def test_loader_rejects_invalid_direction(tmp_path):
 """)
     with pytest.raises(ValueError, match="direction"):
         _load_entities(entities, citations)
+
+
+def test_lookup_rejects_distinct_locus_suffixes(kb):
+    # Antisense/divergent transcripts are different genes; SNCA-AS1 must not
+    # inherit SNCA's PD annotation.
+    assert kb.lookup("SNCA-AS1") is None
+    assert kb.lookup("MAPT_AS1_expr") is None
+    assert kb.lookup("GBA1-DT") is None
+    assert kb.lookup("PINK1-AS") is None

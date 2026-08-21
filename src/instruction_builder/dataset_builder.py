@@ -43,6 +43,12 @@ class DatasetBuilder:
         rng.shuffle(subjects)
 
         n = len(subjects)
+        if n < 3:
+            # With 1-2 subjects the arithmetic below leaves train or val empty,
+            # and the trainer fails much later with an unrelated error.
+            raise ValueError(
+                f"need at least 3 subjects for a train/val/test split, got {n}"
+            )
         n_train = int(n * self.train_frac)
         n_val = int(n * self.val_frac)
         # With very few subjects, integer truncation can starve val/test; give

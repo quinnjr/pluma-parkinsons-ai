@@ -133,8 +133,9 @@ def train(config_path: str, data_dir: str) -> None:
     trainer.save_model(cfg["training"]["output_dir"])
     tokenizer.save_pretrained(cfg["training"]["output_dir"])
 
-    if cfg["hub"].get("push_to_hub"):
-        trainer.push_to_hub(cfg["hub"]["hub_model_id"])
+    hub_cfg = cfg.get("hub") or {}
+    if hub_cfg.get("push_to_hub"):
+        trainer.push_to_hub(hub_cfg["hub_model_id"])
 
 
 def _load_tokenizer(cfg: dict):

@@ -134,3 +134,20 @@ def test_nan_disease_stage_becomes_none(fit, sample_data):
     stages = pd.Series([np.nan, np.nan], index=["PD_001", "HC_001"])
     outputs = Stage1Builder(top_k_biomarkers=2).build(X, y, fit, mofa, env, stages)
     assert all(o.disease_stage is None for o in outputs)
+
+
+def test_zero_shap_features_are_not_biomarkers(sample_data):
+    X, y, mofa, env, stages = sample_data
+    fit = EnsembleFit(
+        proba=np.array([0.91, 0.08]),
+        shap_values=np.array([[0.34, 0.0, 0.21], [0.0, 0.0, 0.0]]),
+        feature_names=FEATURES,
+        out_of_fold=True,
+        cv_auc=0.88,
+        n_splits=2,
+    )
+    outputs = Stage1Builder(top_k_biomarkers=3).build(X, y, fit, mofa, env, stages)
+    pd_out = next(o for o in outputs if o.subject_id == "PD_001")
+    assert [b.feature for b in pd_out.top_biomarkers] == ["LRRK2_p.G2019S", "SNCA_expr"]
+    hc_out = next(o for o in outputs if o.subject_id == "HC_001")
+    assert hc_out.top_biomarkers == []
