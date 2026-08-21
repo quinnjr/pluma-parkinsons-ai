@@ -1,0 +1,410 @@
+# Curated PD entity annotations.
+#
+# Two kinds of claim live in each entry, and they are deliberately separated:
+#
+#   function        -- what the gene/protein/metabolite/taxon *is*. Textbook
+#                      biology, safe to state without qualification.
+#   pd_association  -- what is claimed about it *in Parkinson's disease*. Every
+#                      one of these MUST carry citation keys resolving to
+#                      citations.yaml. An entity with no `pd_association` is a
+#                      feature we can name but must not attach a PD claim to;
+#                      the instruction formatter will report it as a purely
+#                      statistical association instead of inventing mechanism.
+#
+# `direction` is the direction reported *in PD relative to controls* for the
+# measurement named by `measured_as`, not the direction of the SHAP value.
+
+- key: SNCA
+  aliases: [SNCA, alpha-synuclein, a-synuclein, asyn, PARK1, PARK4, rs356181, rs104893877, A53T]
+  modalities: [genomics, transcriptomics, proteomics]
+  function: >-
+    Encodes alpha-synuclein, a small presynaptic protein that regulates synaptic
+    vesicle trafficking and neurotransmitter release. Its aggregated, misfolded
+    form is the principal constituent of Lewy bodies.
+  pd_association:
+    measured_as: "coding/regulatory variant dosage, transcript abundance, or CSF protein level"
+    direction: variable
+    statement: >-
+      Point mutations and multiplications of SNCA cause autosomal-dominant PD, and
+      common variation at the locus is among the strongest sporadic risk signals in
+      genome-wide association meta-analysis. CSF alpha-synuclein concentration is
+      reduced on average in PD relative to controls, and seed amplification assays
+      detect misfolded species in most sporadic cases.
+    citations: [SNCA_A53T_POLYMEROPOULOS, PD_GWAS_NALLS2019, CSF_ASYN_MOLLENHAUER, SAA_SIDEROWF]
+
+- key: LRRK2
+  aliases: [LRRK2, PARK8, dardarin, rs34637584, G2019S, "LRRK2 G2019S"]
+  modalities: [genomics, transcriptomics]
+  function: >-
+    Encodes leucine-rich repeat kinase 2, a large multidomain protein with both
+    kinase and GTPase activity that regulates vesicular trafficking, lysosomal
+    homeostasis, and Rab GTPase phosphorylation.
+  pd_association:
+    measured_as: "risk allele dosage"
+    direction: up
+    statement: >-
+      Mutations in LRRK2 cause autosomal-dominant parkinsonism with pleomorphic
+      pathology; G2019S is the single most common known genetic cause of PD and
+      acts through increased kinase activity.
+    citations: [LRRK2_ZIMPRICH, LRRK2_PAISAN]
+
+- key: GBA1
+  aliases: [GBA1, GBA, glucocerebrosidase, rs76763715, N370S, E326K]
+  modalities: [genomics, transcriptomics]
+  function: >-
+    Encodes the lysosomal enzyme glucocerebrosidase, which hydrolyses
+    glucosylceramide. Biallelic loss of function causes Gaucher disease.
+  pd_association:
+    measured_as: "risk allele dosage"
+    direction: up
+    statement: >-
+      Heterozygous glucocerebrosidase mutations are the most common genetic risk
+      factor for PD identified to date, conferring roughly a fivefold increase in
+      odds across a multicentre analysis, with earlier onset and more frequent
+      cognitive involvement.
+    citations: [GBA_SIDRANSKY]
+
+- key: PRKN
+  aliases: [PRKN, parkin, PARK2]
+  modalities: [genomics, transcriptomics]
+  function: >-
+    Encodes parkin, an E3 ubiquitin ligase that, with PINK1, tags damaged
+    mitochondria for autophagic clearance (mitophagy).
+  pd_association:
+    measured_as: "loss-of-function variant dosage"
+    direction: up
+    statement: >-
+      Loss-of-function mutations in the parkin gene cause autosomal-recessive
+      juvenile parkinsonism.
+    citations: [PRKN_KITADA]
+
+- key: PINK1
+  aliases: [PINK1, PARK6]
+  modalities: [genomics, transcriptomics]
+  function: >-
+    Encodes PTEN-induced kinase 1, a mitochondrially targeted serine/threonine
+    kinase that accumulates on depolarised mitochondria and recruits parkin.
+  pd_association:
+    measured_as: "loss-of-function variant dosage"
+    direction: up
+    statement: >-
+      Homozygous mutations in PINK1 cause hereditary early-onset parkinsonism,
+      implicating mitochondrial quality control in nigral degeneration.
+    citations: [PINK1_VALENTE]
+
+- key: PARK7
+  aliases: [PARK7, DJ-1, DJ1]
+  modalities: [genomics, transcriptomics, proteomics]
+  function: >-
+    Encodes DJ-1, a redox-sensitive protein acting as an oxidative-stress sensor
+    and chaperone.
+  pd_association:
+    measured_as: "loss-of-function variant dosage"
+    direction: up
+    statement: >-
+      Mutations in DJ-1 cause autosomal-recessive early-onset parkinsonism.
+      Note that this citation supports the *genetic* claim only; DJ-1 protein
+      concentration has not been established here as a fluid biomarker.
+    citations: [DJ1_BONIFATI]
+
+- key: MAPT
+  aliases: [MAPT, tau, total tau, t-tau, H1 haplotype, rs393152]
+  modalities: [genomics, proteomics]
+  function: >-
+    Encodes the microtubule-associated protein tau, which stabilises axonal
+    microtubules.
+  pd_association:
+    measured_as: "H1 haplotype dosage or CSF total-tau concentration"
+    direction: variable
+    statement: >-
+      Common variation at the MAPT locus reached genome-wide significance for PD
+      risk in the first well-powered GWAS of the disease. CSF tau has been
+      measured alongside alpha-synuclein in parkinsonian cohorts and contributes
+      to discrimination between parkinsonian syndromes rather than being specific
+      to PD.
+    citations: [MAPT_SIMONSANCHEZ, CSF_ASYN_MOLLENHAUER]
+
+- key: VPS35
+  aliases: [VPS35, PARK17, D620N, rs188286943]
+  modalities: [genomics, transcriptomics]
+  function: >-
+    Encodes a core subunit of the retromer complex, which sorts transmembrane
+    cargo out of endosomes.
+  pd_association:
+    measured_as: "risk allele dosage"
+    direction: up
+    statement: >-
+      The D620N substitution in VPS35 causes late-onset autosomal-dominant PD.
+    citations: [VPS35_VILARINO]
+
+- key: ALDH1A1
+  aliases: [ALDH1A1, RALDH1]
+  modalities: [transcriptomics]
+  function: >-
+    Encodes a cytosolic aldehyde dehydrogenase that detoxifies the reactive
+    dopamine catabolite DOPAL, and is highly expressed in nigral dopaminergic
+    neurons.
+  pd_association:
+    measured_as: "transcript abundance"
+    direction: down
+    statement: >-
+      ALDH1A1 is among the transcripts reported as reduced in expression
+      profiling of parkinsonian substantia nigra pars compacta.
+    citations: [ALDH1A1_GRUNBLATT]
+
+- key: HSPA8
+  aliases: [HSPA8, HSC70]
+  modalities: [transcriptomics]
+  function: >-
+    Encodes heat-shock cognate 71 kDa protein, the chaperone that recognises
+    KFERQ motifs and delivers substrates for chaperone-mediated autophagy.
+  pd_association:
+    measured_as: "transcript abundance"
+    direction: down
+    statement: >-
+      Heat-shock-protein transcripts were among the functional classes reported
+      as altered in parkinsonian substantia nigra pars compacta. This is a
+      class-level finding; treat a single-probe change with caution.
+    citations: [ALDH1A1_GRUNBLATT]
+
+- key: SKP1A
+  aliases: [SKP1A, SKP1, p19skp1]
+  modalities: [transcriptomics]
+  function: >-
+    Encodes an adaptor subunit of SCF E3 ubiquitin-ligase complexes, linking
+    substrate-recognition F-box proteins to the ubiquitin-proteasome system.
+  pd_association:
+    measured_as: "transcript abundance"
+    direction: down
+    statement: >-
+      Ubiquitin-proteasome-system transcripts were among the functional classes
+      reported as altered in parkinsonian substantia nigra pars compacta. This is
+      a class-level finding; treat a single-probe change with caution.
+    citations: [ALDH1A1_GRUNBLATT]
+
+- key: NEFL
+  aliases: [NEFL, NfL, neurofilament light, neurofilament light chain]
+  modalities: [proteomics]
+  function: >-
+    Encodes the light chain of the neurofilament triplet, a structural component
+    of large myelinated axons that is released into CSF and blood on axonal
+    injury.
+  pd_association:
+    measured_as: "blood or CSF concentration"
+    direction: up
+    statement: >-
+      Blood neurofilament light is elevated in atypical parkinsonian disorders
+      relative to PD and controls, making it useful for differential diagnosis
+      rather than as a PD-specific marker. A raised value argues against
+      uncomplicated PD.
+    citations: [NFL_HANSSON]
+
+- key: URATE
+  aliases: [urate, uric acid, urate_serum, serum urate]
+  modalities: [metabolomics, clinical]
+  function: >-
+    Terminal product of purine catabolism in humans and the dominant
+    water-phase antioxidant in plasma.
+  pd_association:
+    measured_as: "serum or plasma concentration"
+    direction: down
+    statement: >-
+      Higher urate concentration predicts a slower rate of clinical decline in
+      PD, an inverse association consistently reported in prospective cohorts.
+    citations: [URATE_ASCHERIO]
+
+- key: CAFFEINE
+  aliases: [caffeine, theophylline, paraxanthine, theobromine, caffeine_metabolites]
+  modalities: [metabolomics]
+  function: >-
+    Dietary methylxanthine and non-selective adenosine-receptor antagonist;
+    metabolised by CYP1A2 to paraxanthine, theobromine, and theophylline.
+  pd_association:
+    measured_as: "serum concentration of caffeine and its metabolites"
+    direction: down
+    statement: >-
+      Serum caffeine and its downstream metabolites are decreased in early PD and
+      have been proposed as diagnostic biomarkers, consistent with the
+      long-established inverse epidemiological association between coffee and
+      caffeine intake and PD risk.
+    citations: [CAFFEINE_FUJIMAKI, CAFFEINE_ROSS]
+
+- key: PREVOTELLA
+  aliases: [Prevotella, Prevotellaceae, g__Prevotella, f__Prevotellaceae]
+  modalities: [microbiome]
+  function: >-
+    Genus of Gram-negative anaerobic bacteria in the gut, associated with
+    fibre-rich diets and mucin degradation.
+  pd_association:
+    measured_as: "relative abundance in stool"
+    direction: down
+    statement: >-
+      Prevotellaceae abundance is reduced in the faecal microbiota of PD patients
+      relative to controls, one of the most frequently replicated taxonomic
+      findings in the field.
+    citations: [MICROBIOME_SCHEPERJANS]
+
+- key: AKKERMANSIA
+  aliases: [Akkermansia, "Akkermansia muciniphila", g__Akkermansia, Verrucomicrobia]
+  modalities: [microbiome]
+  function: >-
+    Mucin-degrading genus resident in the intestinal mucus layer.
+  pd_association:
+    measured_as: "relative abundance in stool"
+    direction: up
+    statement: >-
+      Akkermansia is enriched in the PD gut microbiome. Note that PD medications
+      themselves carry distinct microbiome signatures, so medication status is a
+      confounder that must be accounted for before attributing a shift to disease.
+    citations: [MICROBIOME_HILLBURNS]
+
+- key: ENTEROBACTERIACEAE
+  aliases: [Enterobacteriaceae, f__Enterobacteriaceae]
+  modalities: [microbiome]
+  function: >-
+    Family of Gram-negative facultative anaerobes including many
+    lipopolysaccharide-producing commensals and pathobionts.
+  pd_association:
+    measured_as: "relative abundance in stool"
+    direction: up
+    statement: >-
+      Enterobacteriaceae abundance is positively associated with the severity of
+      postural instability and gait difficulty in PD, i.e. it tracks phenotype
+      rather than merely case status.
+    citations: [MICROBIOME_SCHEPERJANS]
+
+- key: FAECALIBACTERIUM
+  aliases: [Faecalibacterium, "Faecalibacterium prausnitzii", g__Faecalibacterium]
+  modalities: [microbiome]
+  function: >-
+    One of the most abundant butyrate-producing genera in the healthy human
+    colon; butyrate is the principal energy source for colonocytes.
+  pd_association:
+    measured_as: "relative abundance in stool"
+    direction: down
+    statement: >-
+      Short-chain-fatty-acid-producing bacteria, and faecal SCFA concentrations
+      themselves, are reduced in PD patients relative to age-matched controls.
+    citations: [SCFA_UNGER]
+
+- key: ROSEBURIA
+  aliases: [Roseburia, g__Roseburia, Blautia, g__Blautia]
+  modalities: [microbiome]
+  function: >-
+    Butyrate-producing genera of the Lachnospiraceae family.
+  pd_association:
+    measured_as: "relative abundance in stool"
+    direction: down
+    statement: >-
+      Short-chain-fatty-acid-producing bacteria, and faecal SCFA concentrations
+      themselves, are reduced in PD patients relative to age-matched controls.
+    citations: [SCFA_UNGER]
+
+- key: BIFIDOBACTERIUM
+  aliases: [Bifidobacterium, g__Bifidobacterium, Bifidobacteriaceae]
+  modalities: [microbiome]
+  function: >-
+    Genus of Gram-positive anaerobes prominent in the infant gut and retained at
+    lower abundance in adults.
+  pd_association:
+    measured_as: "relative abundance in stool"
+    direction: up
+    statement: >-
+      Bifidobacterium is among the taxa enriched in PD stool samples, with the
+      same medication-confounding caveat that applies across this literature.
+    citations: [MICROBIOME_HILLBURNS]
+
+- key: SNCA_INTRON1_METHYLATION
+  aliases: [SNCA_intron1, cg_SNCA, SNCA_CpG, SNCA_methylation]
+  modalities: [epigenomics]
+  function: >-
+    CpG island within intron 1 of SNCA whose methylation state modulates
+    transcription of the alpha-synuclein gene.
+  pd_association:
+    measured_as: "beta value (fraction methylated)"
+    direction: down
+    statement: >-
+      Methylation of the SNCA intron 1 CpG island is reduced in brain tissue from
+      PD patients, and experimental demethylation increases alpha-synuclein
+      expression, providing a mechanistic link from hypomethylation to elevated
+      protein burden.
+    citations: [SNCA_METH_JOWAED, SNCA_METH_MATSUMOTO]
+
+- key: PESTICIDE_EXPOSURE
+  aliases: [paraquat, rotenone, pesticide, pesticide_exposure, herbicide]
+  modalities: [environmental]
+  function: >-
+    Paraquat is a redox-cycling herbicide generating superoxide; rotenone is a
+    mitochondrial complex I inhibitor used as a broad-spectrum pesticide.
+  pd_association:
+    measured_as: "self-reported or modelled cumulative exposure"
+    direction: up
+    statement: >-
+      Use of rotenone or paraquat is associated with increased PD risk in a
+      case-control study of agricultural exposures, and both agents act through
+      mechanisms (complex I inhibition, oxidative stress) already implicated in
+      nigral degeneration.
+    citations: [PESTICIDE_TANNER]
+
+- key: LEAD_EXPOSURE
+  aliases: [lead, Pb, blood lead, LBXBPB, bone lead, lead_exposure]
+  modalities: [environmental]
+  function: >-
+    Neurotoxic heavy metal; blood lead reflects recent exposure while bone lead
+    integrates cumulative lifetime dose.
+  pd_association:
+    measured_as: "blood or bone lead concentration"
+    direction: up
+    statement: >-
+      Cumulative lead exposure measured in bone is associated with increased odds
+      of PD. Blood lead is a short-half-life proxy for that cumulative burden and
+      is correspondingly weaker evidence.
+    citations: [LEAD_WEISSKOPF]
+
+- key: MDS_UPDRS
+  aliases: [UPDRS, MDS-UPDRS, updrs_total, updrs_iii, motor score]
+  modalities: [clinical]
+  function: >-
+    The Movement Disorder Society revision of the Unified Parkinson's Disease
+    Rating Scale, a four-part clinician- and patient-rated instrument covering
+    non-motor and motor experiences of daily living, motor examination, and
+    complications.
+  pd_association:
+    measured_as: "total or part III score"
+    direction: up
+    statement: >-
+      Higher scores indicate greater symptom burden. The MDS-UPDRS is the
+      reference clinimetric instrument for PD severity, validated against the
+      original UPDRS.
+    citations: [UPDRS_GOETZ]
+
+- key: HOEHN_YAHR
+  aliases: [Hoehn and Yahr, hoehn_yahr, HY, HY stage, hy_stage]
+  modalities: [clinical]
+  function: >-
+    A five-point ordinal staging of PD progression based on the distribution of
+    motor signs and the presence of postural instability.
+  pd_association:
+    measured_as: "stage 1-5"
+    direction: up
+    statement: >-
+      Stage increases with disease progression, from unilateral involvement
+      (stage 1) to wheelchair dependence (stage 5), in the original description
+      of onset, progression and mortality in parkinsonism.
+    citations: [HOEHNYAHR]
+
+- key: BRAAK_STAGE
+  aliases: [Braak, braak_stage, Lewy body stage]
+  modalities: [clinical]
+  function: >-
+    A neuropathological staging scheme tracking the ascending spread of
+    Lewy-related pathology from the dorsal motor nucleus and olfactory structures
+    to the neocortex.
+  pd_association:
+    measured_as: "stage 1-6"
+    direction: up
+    statement: >-
+      Higher Braak stage reflects more widespread Lewy pathology. This is a
+      post-mortem staging scheme; it cannot be measured in a living subject and
+      any in-vivo value is an estimate.
+    citations: [BRAAK_STAGING]

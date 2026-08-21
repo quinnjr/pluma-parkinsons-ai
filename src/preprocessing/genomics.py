@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import pandas as pd
 
 DEFAULT_PD_GENES = ["LRRK2", "GBA", "SNCA", "PINK1", "PRKN", "PARK7", "VPS35", "CHCHD2"]

@@ -1,7 +1,13 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
 from src.utils import ensure_dir
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 PD_KEYWORDS = [
     "parkinson", "parkinson's", "pd ",
@@ -47,7 +53,7 @@ class GEOClient:
         GEOparse.get_GEO(geo=accession, destdir=str(dest), silent=True)
         return dest
 
-    def parse_expression_matrix(self, accession: str) -> "pd.DataFrame":
+    def parse_expression_matrix(self, accession: str) -> pd.DataFrame:
         """Parse downloaded SOFT file into a genes x samples expression matrix."""
         import GEOparse
         import pandas as pd
@@ -61,3 +67,58 @@ class GEOClient:
         if not frames:
             return pd.DataFrame()
         return pd.concat(frames, axis=1).apply(pd.to_numeric, errors="coerce")
+
+    #: Column names used by GEO platform annotation tables for the gene symbol.
+    SYMBOL_COLUMNS = ("Gene Symbol", "GENE_SYMBOL", "gene_symbol", "Symbol", "GENE")
+
+    def probe_to_gene(self, accession: str) -> dict[str, str]:
+        """Map platform probe IDs to HGNC-style gene symbols.
+
+        Without this, a microarray series yields features like ``1007_s_at``,
+        which no knowledge base can annotate. Probes mapping to several genes
+        are dropped rather than arbitrarily assigned to the first one.
+        """
+        import GEOparse
+
+        gse = GEOparse.get_GEO(geo=accession, destdir=str(self.data_dir / accession), silent=True)
+        mapping: dict[str, str] = {}
+        for gpl in gse.gpls.values():
+            table = getattr(gpl, "table", None)
+            if table is None or table.empty:
+                continue
+            symbol_col = next((c for c in self.SYMBOL_COLUMNS if c in table.columns), None)
+            if symbol_col is None:
+                continue
+            id_col = "ID" if "ID" in table.columns else table.columns[0]
+            for probe, symbol in zip(table[id_col], table[symbol_col]):
+                if not isinstance(symbol, str):
+                    continue
+                symbol = symbol.strip()
+                # "GENE1 /// GENE2" means the probe cannot distinguish them.
+                if not symbol or "///" in symbol:
+                    continue
+                mapping[str(probe)] = symbol
+        return mapping
+
+    @staticmethod
+    def collapse_to_genes(expr: pd.DataFrame, mapping: dict[str, str]) -> pd.DataFrame:
+        """Collapse a probe x sample matrix to gene x sample, keeping the most
+        variable probe per gene.
+
+        Averaging probes for the same gene mixes probes with different
+        hybridisation behaviour; taking the most variable one is the
+        conventional choice and keeps each row traceable to a single probe.
+        """
+        import pandas as pd
+
+        symbols = pd.Series({p: mapping[p] for p in expr.index if p in mapping})
+        if symbols.empty:
+            return expr.iloc[0:0]
+        annotated = expr.loc[symbols.index]
+        order = annotated.var(axis=1).sort_values(ascending=False).index
+        ranked = annotated.loc[order]
+        ranked_symbols = symbols.loc[order]
+        keep = ~ranked_symbols.duplicated()
+        collapsed = ranked.loc[keep]
+        collapsed.index = pd.Index(ranked_symbols.loc[keep].values, name="gene_symbol")
+        return collapsed.sort_index()

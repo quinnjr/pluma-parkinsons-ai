@@ -1,39 +1,70 @@
 from __future__ import annotations
+
 import random
 from pathlib import Path
-from src.models import Stage1Output
+
 from src.instruction_builder.formatter import InstructionFormatter
+from src.models import Stage1Output
 from src.utils import save_jsonl
 
 
 class DatasetBuilder:
-    def __init__(self, train_frac: float = 0.8, val_frac: float = 0.1,
-                 seed: int = 42):
+    """Build instruction pairs and split them into train/val/test JSONL files."""
+
+    def __init__(self, train_frac: float = 0.8, val_frac: float = 0.1, seed: int = 42,
+                 formatter: InstructionFormatter | None = None):
+        if not 0 < train_frac < 1 or not 0 <= val_frac < 1 or train_frac + val_frac >= 1:
+            raise ValueError(
+                f"train_frac and val_frac must leave a non-empty test split; got "
+                f"train={train_frac}, val={val_frac}"
+            )
         self.train_frac = train_frac
         self.val_frac = val_frac
         self.seed = seed
-        self.formatter = InstructionFormatter(seed=seed)
+        self.formatter = formatter or InstructionFormatter(seed=seed)
 
     def build_pairs(self, outputs: list[Stage1Output]) -> list[dict]:
-        """Convert each Stage1Output into 3 instruction-response pairs."""
+        """Convert each Stage1Output into one instruction-response pair per task."""
         pairs = []
         for output in outputs:
             pairs.extend(self.formatter.all_formats(output))
         return pairs
 
     def split(self, pairs: list[dict]) -> dict[str, list[dict]]:
-        """80/10/10 train/val/test split with shuffling."""
+        """Split by *subject*, not by pair.
+
+        The three tasks generated for one subject share the same profile text
+        verbatim. Splitting pairs at random puts near-identical inputs on both
+        sides of the boundary, and the resulting validation loss measures
+        memorisation rather than generalisation.
+        """
+        subjects = sorted({pair["subject_id"] for pair in pairs})
         rng = random.Random(self.seed)
-        shuffled = pairs.copy()
-        rng.shuffle(shuffled)
-        n = len(shuffled)
+        rng.shuffle(subjects)
+
+        n = len(subjects)
         n_train = int(n * self.train_frac)
         n_val = int(n * self.val_frac)
-        return {
-            "train": shuffled[:n_train],
-            "val": shuffled[n_train: n_train + n_val],
-            "test": shuffled[n_train + n_val:],
-        }
+        # With very few subjects, integer truncation can starve val/test; give
+        # them one subject each as long as train keeps at least one.
+        if n >= 3:
+            n_val = max(n_val, 1)
+            n_train = min(n_train, n - n_val - 1)
+            n_train = max(n_train, 1)
+
+        assignment = {}
+        for i, subject in enumerate(subjects):
+            if i < n_train:
+                assignment[subject] = "train"
+            elif i < n_train + n_val:
+                assignment[subject] = "val"
+            else:
+                assignment[subject] = "test"
+
+        splits: dict[str, list[dict]] = {"train": [], "val": [], "test": []}
+        for pair in pairs:
+            splits[assignment[pair["subject_id"]]].append(pair)
+        return splits
 
     def save(self, splits: dict[str, list[dict]], output_dir: str | Path) -> None:
         """Write each split to a JSONL file."""

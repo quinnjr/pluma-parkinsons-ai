@@ -1,7 +1,9 @@
 # tests/test_pipeline.py
 import pytest
 import yaml
-from src.pipeline import Pipeline, STAGES
+
+from src.pipeline import STAGES, Pipeline
+
 
 def test_pipeline_stages_list():
     assert "acquire" in STAGES

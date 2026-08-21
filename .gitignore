@@ -21,3 +21,7 @@ htmlcov/
 *.bin
 outputs/
 runs/
+
+# worktree-local symlinks to the shared venv and data store
+.venv
+data

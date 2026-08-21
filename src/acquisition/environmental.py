@@ -1,8 +1,15 @@
 from __future__ import annotations
-from dataclasses import dataclass, asdict
+
+from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
 import requests
+
 from src.utils import ensure_dir
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 EPA_BASE_URL = "https://aqs.epa.gov/data/api"
 
@@ -41,7 +48,7 @@ class EPAClient:
         return base
 
     def fetch_county_annual(self, param: str, state: str, county: str,
-                            year: int) -> "pd.DataFrame":
+                            year: int) -> pd.DataFrame:
         import pandas as pd
         url = self._build_url(
             "annualData/byCounty",
@@ -60,7 +67,12 @@ class EPAClient:
 class NHANESClient:
     """Downloads NHANES environmental exposure data."""
 
-    BASE_URL = "https://wwwn.cdc.gov/Nchs/Nhanes"
+    #: CDC reorganised NHANES hosting; data files now live under
+    #: /Nchs/Data/Nhanes/Public/<first-year-of-cycle>/DataFiles/. The old
+    #: /Nchs/Nhanes/<cycle>/ URLs return an HTML notice page with HTTP 200.
+    BASE_URL = "https://wwwn.cdc.gov/Nchs/Data/Nhanes/Public"
+    #: SAS transport (XPORT) files begin with this fixed 80-byte library header.
+    XPORT_MAGIC = b"HEADER RECORD"
     EXPOSURE_FILES = {
         "2017-2018": {
             "metals": "PBCD_J.XPT",
@@ -78,11 +90,25 @@ class NHANESClient:
 
     def download_file(self, cycle: str, category: str) -> Path:
         filename = self.EXPOSURE_FILES[cycle][category]
-        url = f"{self.BASE_URL}/{cycle}/{filename}"
+        year = cycle.split("-")[0]
+        url = f"{self.BASE_URL}/{year}/DataFiles/{filename}"
         dest = self.data_dir / cycle / filename
         ensure_dir(dest.parent)
+        if dest.exists() and not self._is_xport(dest.read_bytes()):
+            # A cached error page from the pre-move URL; refetch.
+            dest.unlink()
         if not dest.exists():
             resp = requests.get(url, timeout=60)
             resp.raise_for_status()
+            if not self._is_xport(resp.content):
+                raise RuntimeError(
+                    f"{url} did not return a SAS XPORT file (got "
+                    f"{resp.headers.get('content-type', 'unknown type')!r}); "
+                    f"the CDC may have moved the file again"
+                )
             dest.write_bytes(resp.content)
         return dest
+
+    @classmethod
+    def _is_xport(cls, content: bytes) -> bool:
+        return content.startswith(cls.XPORT_MAGIC)

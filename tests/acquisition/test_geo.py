@@ -1,7 +1,6 @@
 # tests/acquisition/test_geo.py
-import pytest
-from unittest.mock import patch, MagicMock
 from src.acquisition.geo import GEOClient, GEOStudy
+
 
 def test_geo_study_parses_accession():
     study = GEOStudy(accession="GSE123456", title="PD RNA-seq study",

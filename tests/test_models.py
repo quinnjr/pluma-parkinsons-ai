@@ -1,6 +1,8 @@
 # tests/test_models.py
 import pytest
-from src.models import Subject, OmicsProfile, BiomarkerHit, Stage1Output
+
+from src.models import BiomarkerHit, OmicsProfile, Stage1Output, Subject
+
 
 def test_subject_creation():
     s = Subject(subject_id="PD_001", diagnosis="PD", age=65, sex="M")

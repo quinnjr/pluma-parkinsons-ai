@@ -1,7 +1,8 @@
 from __future__ import annotations
+
 from functools import reduce
+
 import pandas as pd
-import numpy as np
 
 
 class MOFAIntegrator:

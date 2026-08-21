@@ -1,8 +1,10 @@
 # tests/integration/test_integration.py
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+
 from src.integration.ensemble import OmicsEnsemble
+
 
 @pytest.fixture
 def feature_matrix():
