@@ -96,11 +96,19 @@ class Pipeline:
         logger.info("Downloading GEO series %s", accession)
         geo = GEOClient(raw / "geo")
         expr = geo.parse_expression_matrix(accession)
-        diagnosis = self._geo_diagnoses(accession, raw / "geo")
+        diagnosis = self._geo_diagnoses(geo, accession)
 
         subjects = [s for s in expr.columns if diagnosis.get(s) in {"PD", "HC"}]
-        if max_subjects:
-            subjects = subjects[:max_subjects]
+        if max_subjects and len(subjects) > max_subjects:
+            # GEO series often list samples grouped by class, so a positional
+            # cut could produce a single-class cohort. Truncate per class,
+            # keeping the original proportions and at least 2 of each class.
+            pd_subjects = [s for s in subjects if diagnosis[s] == "PD"]
+            hc_subjects = [s for s in subjects if diagnosis[s] == "HC"]
+            n_pd = round(max_subjects * len(pd_subjects) / len(subjects))
+            n_pd = min(max(n_pd, 2), len(pd_subjects), max_subjects - 2)
+            keep = set(pd_subjects[:n_pd] + hc_subjects[: max_subjects - n_pd])
+            subjects = [s for s in subjects if s in keep]
         if not subjects:
             raise RuntimeError(
                 f"{accession} yielded no samples with a PD/HC label; check the series "
@@ -132,18 +140,16 @@ class Pipeline:
                 # empty is the honest option; inventing "early" for every PD
                 # subject would put a fabricated label into training targets.
                 "disease_stage": [None] * len(subjects),
-                "environmental_risk_score": [env_scores.get(s, 0.0) for s in subjects],
+                "environmental_risk_score": [env_scores[s] for s in subjects],
             }
         )
         manifest.to_csv(raw / MANIFEST_FILENAME, index=False)
         logger.info("Manifest written to %s (%d subjects)", raw / MANIFEST_FILENAME, len(manifest))
 
     @staticmethod
-    def _geo_diagnoses(accession: str, destdir: Path) -> dict[str, str]:
+    def _geo_diagnoses(geo, accession: str) -> dict[str, str]:
         """Read PD/HC labels out of each sample's characteristics fields."""
-        import GEOparse
-
-        gse = GEOparse.get_GEO(geo=accession, destdir=str(destdir / accession), silent=True)
+        gse = geo.load_series(accession)
         labels = {}
         for name, gsm in gse.gsms.items():
             characteristics = " ".join(gsm.metadata.get("characteristics_ch1", [])).lower()
@@ -189,6 +195,11 @@ class Pipeline:
         from src.preprocessing.transcriptomics import TranscriptomicsPreprocessor
 
         raw, processed = self.path("raw"), ensure_dir(self.path("processed"))
+        # Stage output is the directory's whole contents: a matrix left over
+        # from an earlier run with different simulated_modalities would be
+        # integrated downstream without appearing in provenance.
+        for stale in processed.glob("*.csv"):
+            stale.unlink()
         manifest = pd.read_csv(raw / MANIFEST_FILENAME)
         subjects = manifest["subject_id"].astype(str).tolist()
         diagnosis = pd.Series(manifest["diagnosis"].values, index=subjects)
@@ -244,6 +255,12 @@ class Pipeline:
 
         processed = self.path("processed")
         integrated = ensure_dir(self.path("integrated"))
+        # Clear before writing: per-subject JSONs from a previous, larger or
+        # different cohort would otherwise be globbed into the instruction
+        # dataset alongside this run's records, and a partial crash would be
+        # indistinguishable from a complete stage.
+        for stale in integrated.glob("*.json"):
+            stale.unlink()
         manifest = pd.read_csv(processed / MANIFEST_FILENAME)
         subjects = manifest["subject_id"].astype(str).tolist()
 

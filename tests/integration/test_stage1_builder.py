@@ -151,3 +151,22 @@ def test_zero_shap_features_are_not_biomarkers(sample_data):
     assert [b.feature for b in pd_out.top_biomarkers] == ["LRRK2_p.G2019S", "SNCA_expr"]
     hc_out = next(o for o in outputs if o.subject_id == "HC_001")
     assert hc_out.top_biomarkers == []
+
+
+def test_integrated_prefix_maps_to_integrated_modality():
+    assert Stage1Builder.infer_modality("integrated:factor_1") == "integrated"
+    assert Stage1Builder.infer_modality("integrated:factor_12") == "integrated"
+
+
+def test_namespaced_prefix_wins_over_stem_patterns():
+    # The prefix is the pipeline's authoritative label; only the remainder is
+    # scanned when the prefix itself is not a known modality.
+    assert Stage1Builder.infer_modality("transcriptomics:NEFL") == "transcriptomics"
+    assert Stage1Builder.infer_modality("unknownprefix:SNCA_expr") == "transcriptomics"
+
+
+def test_missing_environmental_score_raises(fit, sample_data):
+    X, y, mofa, env, stages = sample_data
+    env_missing = env.drop("HC_001")
+    with pytest.raises(ValueError, match="environmental risk score"):
+        Stage1Builder(top_k_biomarkers=2).build(X, y, fit, mofa, env_missing, stages)

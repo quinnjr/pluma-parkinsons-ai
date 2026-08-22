@@ -22,14 +22,19 @@ ENTITIES_PATH = DATA_DIR / "entities.yaml"
 
 #: Affixes that appear in feature names purely as bookkeeping and carry no
 #: identity of their own (``SNCA_expr`` and ``SNCA`` are the same gene).
+#: Deliberately absent: bare letters (a stripped ``p`` collapsed ``p-tau`` onto
+#: MAPT's plain ``tau`` alias) and methylation markers (``cg``/``cpg``/``meth``
+#: are what distinguish an intron-methylation entity from its parent gene).
 _AFFIXES = (
     "expr", "exprs", "expression", "rna", "mrna", "transcript",
-    "prot", "protein", "csf", "serum", "plasma", "blood",
-    "cpg", "cg", "meth", "methylation", "beta",
+    "prot", "protein", "csf", "serum", "plasma", "blood", "beta",
     "bug", "otu", "asv", "genus", "species", "abundance",
     "metab", "metabolite", "snp", "variant", "allele", "dosage",
-    "g", "f", "p", "c", "o", "s", "k",  # QIIME-style rank prefixes: g__, f__, ...
 )
+
+#: QIIME-style taxonomic rank prefixes (``g__Prevotella``); stripped structurally
+#: rather than as bare-letter affixes so a lone ``p`` in ``p_tau`` survives.
+_QIIME_RANK_PREFIX = re.compile(r"(?:^|(?<=[^a-z0-9]))[kpcofgs]__", re.IGNORECASE)
 
 _VALID_DIRECTIONS = {"up", "down", "variable"}
 
@@ -37,6 +42,10 @@ _VALID_DIRECTIONS = {"up", "down", "variable"}
 #: transcripts (-AS1), divergent transcripts (-DT), intronic transcripts (-IT1),
 #: opposite-strand (-OS). ``SNCA-AS1`` must not inherit SNCA's PD annotation.
 _DISTINCT_LOCUS_SUFFIXES = {"as", "as1", "as2", "as3", "dt", "it1", "os"}
+
+#: Modifier tokens directly BEFORE an alias match that change analyte identity:
+#: phospho-tau is a different biomarker from the total tau MAPT curates.
+_DISTINCT_MODIFIER_PREFIXES = {"p", "phospho", "phosphorylated"}
 
 
 @dataclass(frozen=True)
@@ -85,7 +94,8 @@ class Entity:
 
 def _normalise(text: str) -> str:
     """Casefold and collapse everything that is not alphanumeric to single spaces."""
-    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+    text = _QIIME_RANK_PREFIX.sub(" ", text.lower())
+    return re.sub(r"[^a-z0-9]+", " ", text).strip()
 
 
 def _tokens(text: str) -> list[str]:
@@ -109,15 +119,10 @@ class KnowledgeBase:
                 if alias_tokens:
                     index.append((alias_tokens, entity))
         self._alias_index = sorted(index, key=lambda pair: -len(" ".join(pair[0])))
-        self._by_key = {e.key: e for e in self.entities}
+        #: Every PMID in the citation set, for hallucination auditing.
+        self.known_pmids = frozenset(c.pmid for c in self.citations.values())
 
     # -- access ----------------------------------------------------------------
-
-    def get(self, key: str) -> Entity | None:
-        return self._by_key.get(key)
-
-    def citation(self, key: str) -> Citation | None:
-        return self.citations.get(key)
 
     def lookup(self, feature: str, modality: str | None = None) -> Entity | None:
         """Resolve a feature name to a curated entity, or ``None`` if uncurated.
@@ -138,13 +143,11 @@ class KnowledgeBase:
             return entity
         return None
 
-    def modality_entities(self, modality: str) -> list[Entity]:
-        return [e for e in self.entities if modality in e.modalities]
-
 
 def _matches(haystack: list[str], needle: list[str]) -> bool:
     """True if ``needle`` appears as a contiguous token run inside ``haystack``,
-    and the run is not immediately followed by a distinct-locus suffix."""
+    not immediately followed by a distinct-locus suffix and not immediately
+    preceded by an identity-changing modifier."""
     n = len(needle)
     for i in range(len(haystack) - n + 1):
         if haystack[i : i + n] != needle:
@@ -152,12 +155,15 @@ def _matches(haystack: list[str], needle: list[str]) -> bool:
         following = haystack[i + n] if i + n < len(haystack) else None
         if following in _DISTINCT_LOCUS_SUFFIXES:
             continue
+        preceding = haystack[i - 1] if i > 0 else None
+        if preceding in _DISTINCT_MODIFIER_PREFIXES:
+            continue
         return True
     return False
 
 
 def _load_citations(path: Path) -> dict[str, Citation]:
-    raw = yaml.safe_load(path.read_text()) or {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     citations: dict[str, Citation] = {}
     for key, value in raw.items():
         pmid = str(value["pmid"])
@@ -175,7 +181,7 @@ def _load_citations(path: Path) -> dict[str, Citation]:
 
 
 def _load_entities(path: Path, citations: dict[str, Citation]) -> tuple[Entity, ...]:
-    raw = yaml.safe_load(path.read_text()) or []
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or []
     entities = []
     for item in raw:
         assoc = None

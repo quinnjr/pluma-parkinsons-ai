@@ -49,14 +49,13 @@ class DatasetBuilder:
             raise ValueError(
                 f"need at least 3 subjects for a train/val/test split, got {n}"
             )
-        n_train = int(n * self.train_frac)
-        n_val = int(n * self.val_frac)
-        # With very few subjects, integer truncation can starve val/test; give
-        # them one subject each as long as train keeps at least one.
-        if n >= 3:
-            n_val = max(n_val, 1)
-            n_train = min(n_train, n - n_val - 1)
-            n_train = max(n_train, 1)
+        # Integer truncation can starve any split; clamp so all three end up
+        # non-empty. The final n_val clamp is what guarantees test >= 1 — a
+        # bare max(n_train, 1) after the test-reserving min() could otherwise
+        # hand train+val the whole cohort.
+        n_train = max(min(int(n * self.train_frac), n - 2), 1)
+        n_val = max(int(n * self.val_frac), 1)
+        n_val = min(n_val, n - n_train - 1)
 
         assignment = {}
         for i, subject in enumerate(subjects):

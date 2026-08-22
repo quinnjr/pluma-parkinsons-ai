@@ -23,30 +23,43 @@ from src.utils import load_config, load_jsonl
 logger = logging.getLogger(__name__)
 
 
-def load_model(model_name: str, adapter: str | None, load_in_4bit: bool = True):
-    """Load the base model, optionally with a trained LoRA adapter attached."""
-    import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+def load_model(cfg: dict, adapter: str | None):
+    """Load the base model, optionally with a trained LoRA adapter attached.
 
-    quantization = (
-        BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16,
-            bnb_4bit_use_double_quant=True,
-        )
-        if load_in_4bit
-        else None
+    Quantization and tokenizer setup are the same config-driven helpers the
+    training path uses — evaluating under a different quantization (or a
+    tokenizer without the pad fallback) than the model was trained with would
+    silently invalidate the metrics. The model class comes from the checkpoint
+    config's own architecture: gemma-4-*-it is a ``gemma4_unified`` checkpoint,
+    and forcing AutoModelForCausalLM either fails or builds a module tree the
+    adapter's weight paths do not match (see the note in train.py).
+    """
+    import torch
+    import transformers
+    from transformers import AutoConfig, AutoModelForCausalLM
+
+    from src.training.train import _load_tokenizer, build_quantization_config
+
+    model_name = cfg["model"]["name"]
+    config = AutoConfig.from_pretrained(model_name)
+    architectures = getattr(config, "architectures", None) or []
+    model_cls = next(
+        (getattr(transformers, arch) for arch in architectures
+         if hasattr(transformers, arch)),
+        AutoModelForCausalLM,
     )
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name, quantization_config=quantization, device_map="auto", dtype=torch.bfloat16
+    model = model_cls.from_pretrained(
+        model_name,
+        quantization_config=build_quantization_config(cfg),
+        device_map="auto",
+        dtype=getattr(torch, cfg["model"]["bnb_4bit_compute_dtype"]),
     )
     if adapter:
         from peft import PeftModel
 
         model = PeftModel.from_pretrained(model, adapter)
     model.eval()
-    tokenizer = AutoTokenizer.from_pretrained(adapter or model_name)
+    tokenizer = _load_tokenizer(cfg, source=adapter or model_name)
     return model, tokenizer
 
 
@@ -59,14 +72,22 @@ def generate(model, tokenizer, records: list[dict], max_new_tokens: int = 768,
     for start in range(0, len(records), batch_size):
         batch = records[start : start + batch_size]
         prompts = [render_for_inference(tokenizer, record) for record in batch]
-        encoded = tokenizer(prompts, return_tensors="pt", padding=True, padding_side="left")
+        # The chat template already emitted BOS; re-adding special tokens here
+        # would prepend a second one, a prefix the model never saw in training.
+        encoded = tokenizer(prompts, return_tensors="pt", padding=True,
+                            padding_side="left", add_special_tokens=False)
         encoded = {k: v.to(model.device) for k, v in encoded.items()}
+        # Explicit None check: Gemma's real <pad> token has id 0, which a bare
+        # `or` would discard in favour of EOS.
+        pad_id = tokenizer.pad_token_id
+        if pad_id is None:
+            pad_id = tokenizer.eos_token_id
         with torch.no_grad():
             generated = model.generate(
                 **encoded,
                 max_new_tokens=max_new_tokens,
                 do_sample=False,
-                pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
+                pad_token_id=pad_id,
             )
         prompt_length = encoded["input_ids"].shape[1]
         outputs.extend(
@@ -85,7 +106,7 @@ def evaluate(config_path: str, data_path: str, adapter: str | None, limit: int |
     if limit:
         records = records[:limit]
 
-    model, tokenizer = load_model(cfg["model"]["name"], adapter)
+    model, tokenizer = load_model(cfg, adapter)
     predictions = generate(model, tokenizer, records, max_new_tokens, batch_size)
     references = [record["output"] for record in records]
     return compute_metrics(predictions, references, records)

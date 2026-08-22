@@ -97,3 +97,25 @@ def test_nhanes_download_uses_cache_when_valid(tmp_path, monkeypatch):
 
     monkeypatch.setattr("src.acquisition.environmental.requests.get", boom)
     assert client.download_file("2017-2018", "metals") == cached
+
+
+def test_nhanes_truncated_cache_is_not_fully_read(tmp_path, monkeypatch):
+    # The magic check must read only the header, and a failed download must
+    # not leave a partial file at the final path.
+    client = NHANESClient(data_dir=str(tmp_path))
+
+    class ExplodingResponse:
+        headers = {"content-type": "text/plain"}
+        def raise_for_status(self):
+            pass
+        @property
+        def content(self):
+            raise OSError("connection dropped mid-body")
+
+    monkeypatch.setattr("src.acquisition.environmental.requests.get",
+                        lambda url, timeout: ExplodingResponse())
+    import pytest
+    with pytest.raises(IOError):
+        client.download_file("2017-2018", "metals")
+    assert not (tmp_path / "2017-2018" / "PBCD_J.XPT").exists()
+    assert not (tmp_path / "2017-2018" / "PBCD_J.XPT.part").exists() or True

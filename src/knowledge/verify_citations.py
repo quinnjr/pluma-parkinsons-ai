@@ -21,7 +21,7 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
-from src.knowledge.kb import Citation, load_knowledge_base
+from src.knowledge.kb import Citation, _normalise, load_knowledge_base
 
 ESUMMARY = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
 #: NCBI asks for no more than 3 requests/second without an API key.
@@ -45,7 +45,7 @@ class VerificationResult:
 def _normalise_title(text: str) -> str:
     text = re.sub(r"<[^>]+>", "", text or "")
     text = text.lower().replace("α", "alpha").replace("β", "beta")
-    return re.sub(r"[^a-z0-9]+", " ", text).strip()
+    return _normalise(text)
 
 
 def fetch_summaries(pmids: list[str], timeout: int = 30) -> dict[str, dict]:

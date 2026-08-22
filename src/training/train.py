@@ -65,6 +65,10 @@ def build_sft_config(cfg: dict):
     from trl import SFTConfig
 
     training = cfg["training"]
+    # One dtype knob: the quantization compute dtype drives training precision
+    # too. Hardcoding bf16 alongside a config-driven compute dtype let a user
+    # set float16 for pre-Ampere hardware and still get bf16 training args.
+    compute_dtype = cfg["model"]["bnb_4bit_compute_dtype"]
     return SFTConfig(
         output_dir=training["output_dir"],
         num_train_epochs=training["num_train_epochs"],
@@ -84,11 +88,16 @@ def build_sft_config(cfg: dict):
         # training the model to reproduce its own inputs.
         completion_only_loss=True,
         gradient_checkpointing=training.get("gradient_checkpointing", True),
-        bf16=True,
-        fp16=False,
+        bf16=compute_dtype == "bfloat16",
+        fp16=compute_dtype == "float16",
+        # Bucket similar-length pairs to cut padding waste (the pre-SFTConfig
+        # trainer had group_by_length=True; the boolean is gone in
+        # transformers >= 5.10, replaced by this strategy field).
+        train_sampling_strategy="group_by_length",
         report_to=training.get("report_to", "none"),
         seed=training["seed"],
-        model_init_kwargs={"dtype": "bfloat16"},
+        model_init_kwargs={"dtype": compute_dtype},
+        hub_model_id=(cfg.get("hub") or {}).get("hub_model_id"),
     )
 
 
@@ -135,13 +144,17 @@ def train(config_path: str, data_dir: str) -> None:
 
     hub_cfg = cfg.get("hub") or {}
     if hub_cfg.get("push_to_hub"):
-        trainer.push_to_hub(hub_cfg["hub_model_id"])
+        # The target repo comes from args.hub_model_id (set in build_sft_config);
+        # Trainer.push_to_hub's first positional is the COMMIT MESSAGE, so
+        # passing the repo id there pushed to the wrong repo.
+        trainer.push_to_hub()
 
 
-def _load_tokenizer(cfg: dict):
+def _load_tokenizer(cfg: dict, source: str | None = None):
+    """Load the tokenizer from ``source`` (default: the configured base model)."""
     from transformers import AutoTokenizer
 
-    tokenizer = AutoTokenizer.from_pretrained(cfg["model"]["name"])
+    tokenizer = AutoTokenizer.from_pretrained(source or cfg["model"]["name"])
     # Gemma 4 ships a real <pad> token; falling back to EOS would make the
     # collator mask genuine end-of-turn tokens out of the loss.
     if tokenizer.pad_token is None:

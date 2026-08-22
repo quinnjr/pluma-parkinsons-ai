@@ -18,10 +18,13 @@ exercise integration end to end. This module supplies it, under three rules:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING
 
 import numpy as np
-import pandas as pd
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -32,12 +35,16 @@ class SimulatedFeature:
 
     name: str
     #: Multiplicative or additive shift applied to PD subjects. Positive means
-    #: higher in PD, matching the `direction` recorded in the knowledge base.
+    #: higher in PD. The MAGNITUDE is authored here; the SIGN is derived from
+    #: the knowledge base's recorded direction at generation time (see
+    #: ``_kb_directed``), so entities.yaml stays the single source of truth.
     pd_shift: float
 
 
-# Directions here mirror src/knowledge/entities.yaml. Where the knowledge base
-# records "variable", no shift is applied.
+# Shift signs below are documentation of intent; ``_kb_directed`` overrides them
+# from src/knowledge/entities.yaml wherever the entity records up/down. Where
+# the knowledge base records "variable" (or the feature is uncurated filler),
+# the authored value is used as-is.
 GENOMICS_RISK_VARIANTS = (
     SimulatedFeature("rs34637584", 0.15),   # LRRK2 G2019S
     SimulatedFeature("rs76763715", 0.08),   # GBA1 N370S
@@ -73,7 +80,36 @@ MICROBIOME_TAXA = (
 
 
 def _frame(data: np.ndarray, names: list[str], subjects: list[str]) -> pd.DataFrame:
+    import pandas as pd
+
     return pd.DataFrame(data, index=pd.Index(subjects, name="subject_id"), columns=names)
+
+
+def _kb_directed(features: tuple[SimulatedFeature, ...],
+                 modality: str) -> tuple[SimulatedFeature, ...]:
+    """Re-sign each curated shift from the knowledge base's recorded direction.
+
+    Hand-mirroring the signs from entities.yaml invited silent desync: editing
+    an entity's direction there would leave the simulator shifting the old way
+    while the formatter narrates concordance against the new one.
+    """
+    from src.knowledge import load_knowledge_base
+
+    kb = load_knowledge_base()
+    directed = []
+    for feature in features:
+        entity = kb.lookup(feature.name, modality)
+        direction = (
+            entity.pd_association.direction
+            if entity is not None and entity.pd_association is not None
+            else None
+        )
+        if direction == "up":
+            feature = replace(feature, pd_shift=abs(feature.pd_shift))
+        elif direction == "down":
+            feature = replace(feature, pd_shift=-abs(feature.pd_shift))
+        directed.append(feature)
+    return tuple(directed)
 
 
 def _padded_names(curated: tuple[SimulatedFeature, ...], total: int, prefix: str) -> list[str]:
@@ -101,6 +137,11 @@ class SyntheticModalityGenerator:
             "must not be interpreted as evidence about Parkinson's disease.",
             ", ".join(modalities),
         )
+        if not diagnosis.index.is_unique:
+            # .loc on a duplicated label returns extra rows, desyncing is_pd
+            # from the subject list far from this root cause.
+            duplicated = sorted(diagnosis.index[diagnosis.index.duplicated()])
+            raise ValueError(f"duplicate subject ids in diagnosis series: {duplicated}")
         is_pd = (diagnosis.loc[subjects] == "PD").to_numpy().astype(float)
         builders = {
             "genomics": self._genomics,
@@ -119,37 +160,46 @@ class SyntheticModalityGenerator:
     # -- per-modality simulators ----------------------------------------------
 
     def _genomics(self, subjects: list[str], is_pd: np.ndarray, n_total: int = 30) -> pd.DataFrame:
-        names = _padded_names(GENOMICS_RISK_VARIANTS, n_total, "snp")
+        curated = _kb_directed(GENOMICS_RISK_VARIANTS, "genomics")
+        names = _padded_names(curated, n_total, "snp")
         data = self.rng.integers(0, 3, size=(len(subjects), n_total)).astype(float)
-        for i, feature in enumerate(GENOMICS_RISK_VARIANTS):
+        for i, feature in enumerate(curated):
             # Risk-allele carriage: baseline population frequency plus a PD excess.
             data[:, i] = self.rng.binomial(1, np.clip(0.05 + feature.pd_shift * is_pd, 0, 1))
         return _frame(data, names, subjects)
 
     def _epigenomics(self, subjects: list[str], is_pd: np.ndarray, n_total: int = 40) -> pd.DataFrame:
-        names = _padded_names(EPIGENOMICS_CPGS, n_total, "cg")
+        curated = _kb_directed(EPIGENOMICS_CPGS, "epigenomics")
+        names = _padded_names(curated, n_total, "cg")
         data = self.rng.uniform(0.1, 0.9, size=(len(subjects), n_total))
-        for i, feature in enumerate(EPIGENOMICS_CPGS):
+        for i, feature in enumerate(curated):
             data[:, i] = np.clip(data[:, i] + feature.pd_shift * is_pd, 0.01, 0.99)
         return _frame(data, names, subjects)
 
+    def _multiplicative(self, subjects: list[str], is_pd: np.ndarray, modality: str,
+                        curated: tuple[SimulatedFeature, ...], prefix: str,
+                        n_total: int, base: np.ndarray) -> pd.DataFrame:
+        """Shared skeleton for the modalities whose PD shift is a scale factor."""
+        directed = _kb_directed(curated, modality)
+        names = _padded_names(directed, n_total, prefix)
+        for i, feature in enumerate(directed):
+            base[:, i] *= 1 + feature.pd_shift * is_pd
+        return _frame(base, names, subjects)
+
     def _proteomics(self, subjects: list[str], is_pd: np.ndarray, n_total: int = 25) -> pd.DataFrame:
-        names = _padded_names(PROTEOMICS_TARGETS, n_total, "prot")
-        data = self.rng.lognormal(0, 0.5, size=(len(subjects), n_total))
-        for i, feature in enumerate(PROTEOMICS_TARGETS):
-            data[:, i] *= 1 + feature.pd_shift * is_pd
-        return _frame(data, names, subjects)
+        return self._multiplicative(
+            subjects, is_pd, "proteomics", PROTEOMICS_TARGETS, "prot", n_total,
+            self.rng.lognormal(0, 0.5, size=(len(subjects), n_total)),
+        )
 
     def _metabolomics(self, subjects: list[str], is_pd: np.ndarray, n_total: int = 35) -> pd.DataFrame:
-        names = _padded_names(METABOLOMICS_TARGETS, n_total, "metab")
-        data = self.rng.exponential(1.0, size=(len(subjects), n_total)) + 0.1
-        for i, feature in enumerate(METABOLOMICS_TARGETS):
-            data[:, i] *= 1 + feature.pd_shift * is_pd
-        return _frame(data, names, subjects)
+        return self._multiplicative(
+            subjects, is_pd, "metabolomics", METABOLOMICS_TARGETS, "metab", n_total,
+            self.rng.exponential(1.0, size=(len(subjects), n_total)) + 0.1,
+        )
 
     def _microbiome(self, subjects: list[str], is_pd: np.ndarray, n_total: int = 20) -> pd.DataFrame:
-        names = _padded_names(MICROBIOME_TAXA, n_total, "bug")
-        data = self.rng.dirichlet(np.ones(n_total), size=len(subjects)) * 10_000
-        for i, feature in enumerate(MICROBIOME_TAXA):
-            data[:, i] *= 1 + feature.pd_shift * is_pd
-        return _frame(data, names, subjects)
+        return self._multiplicative(
+            subjects, is_pd, "microbiome", MICROBIOME_TAXA, "bug", n_total,
+            self.rng.dirichlet(np.ones(n_total), size=len(subjects)) * 10_000,
+        )

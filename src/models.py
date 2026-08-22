@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 
 VALID_DIAGNOSES = {"PD", "HC", "SWEDD", "Prodromal"}
 VALID_STAGES = {"early", "mid", "late", None}
@@ -120,11 +120,17 @@ class BiomarkerHit:
     @classmethod
     def from_dict(cls, d: dict) -> BiomarkerHit:
         # Older Stage1Output JSON stored the SHAP sign under "direction" as
-        # up/down. Read it, but map it onto the unambiguous field name.
+        # up/down. Read it, but map it onto the unambiguous field name. A legacy
+        # record with NO direction key must not default to toward_pd — that
+        # would invent an attribution. The effect is by definition the SHAP
+        # sign, so derive it from the stored value instead.
         effect = d.get("effect")
         if effect is None:
             legacy = d.get("direction")
-            effect = AWAY_FROM_PD if legacy == "down" else TOWARD_PD
+            if legacy in ("up", "down"):
+                effect = AWAY_FROM_PD if legacy == "down" else TOWARD_PD
+            else:
+                effect = TOWARD_PD if d["shap"] > 0 else AWAY_FROM_PD
         return cls(
             modality=d["modality"],
             feature=d["feature"],
@@ -155,18 +161,6 @@ class Stage1Output:
                 f"prediction_confidence must be a probability in [0, 1], "
                 f"got {self.prediction_confidence!r}"
             )
-
-    @property
-    def modalities(self) -> list[str]:
-        """Modalities represented in the top biomarkers, in rank order."""
-        seen: list[str] = []
-        for hit in self.top_biomarkers:
-            if hit.modality not in seen:
-                seen.append(hit.modality)
-        return seen
-
-    def with_provenance(self, provenance: Provenance) -> Stage1Output:
-        return replace(self, provenance=provenance)
 
     def to_dict(self) -> dict:
         return {

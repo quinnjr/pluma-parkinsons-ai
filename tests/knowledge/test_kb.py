@@ -173,3 +173,28 @@ def test_lookup_rejects_distinct_locus_suffixes(kb):
     assert kb.lookup("MAPT_AS1_expr") is None
     assert kb.lookup("GBA1-DT") is None
     assert kb.lookup("PINK1-AS") is None
+
+
+def test_lookup_rejects_phospho_modifier(kb):
+    # p-tau is a different analyte from the total tau MAPT curates; the bare
+    # 'p' must neither be stripped as an affix nor match through.
+    assert kb.lookup("csf_p_tau", "proteomics") is None
+    assert kb.lookup("p-tau", "proteomics") is None
+    assert kb.lookup("plasma_p_tau181") is None
+    # Plain tau still resolves.
+    assert kb.lookup("csf_total_tau", "proteomics").key == "MAPT"
+
+
+def test_lookup_methylation_entity_not_shadowed_by_gene(kb):
+    # cg/CpG markers identify the intron-1 methylation entity, not the gene.
+    assert kb.lookup("cg_SNCA").key == "SNCA_INTRON1_METHYLATION"
+    assert kb.lookup("SNCA_CpG").key == "SNCA_INTRON1_METHYLATION"
+
+
+def test_qiime_rank_prefixes_still_stripped(kb):
+    assert kb.lookup("g__Prevotella", "microbiome") is not None
+    assert kb.lookup("f__Prevotellaceae", "microbiome") is not None
+
+
+def test_known_pmids_matches_citations(kb):
+    assert kb.known_pmids == frozenset(c.pmid for c in kb.citations.values())

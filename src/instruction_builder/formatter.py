@@ -42,21 +42,22 @@ class GroundedHit:
         return self.entity is not None and self.entity.has_pd_claim
 
     @property
+    def observed_direction(self) -> str | None:
+        """``"up"``/``"down"`` for the measurement, or ``None`` (missing or z=0)."""
+        if self.value_z is None or self.value_z == 0:
+            return None
+        return "up" if self.value_z > 0 else "down"
+
+    @property
     def concordance(self) -> str:
         """Does the subject's observed value move the way the literature reports?"""
-        if not self.is_annotated or self.value_z is None or self.value_z == 0:
+        observed = self.observed_direction
+        if not self.is_annotated or observed is None:
             return UNDETERMINED
         expected = self.entity.pd_association.direction
         if expected not in {"up", "down"}:
             return UNDETERMINED
-        observed = "up" if self.value_z > 0 else "down"
         return CONCORDANT if observed == expected else DISCORDANT
-
-    @property
-    def citation_keys(self) -> tuple[str, ...]:
-        if not self.is_annotated:
-            return ()
-        return tuple(c.key for c in self.entity.pd_association.citations)
 
     @property
     def pmids(self) -> tuple[str, ...]:
@@ -70,11 +71,12 @@ def _push(hit: GroundedHit) -> str:
 
 
 def _value_phrase(hit: GroundedHit) -> str:
-    if hit.value_z is None:
-        return "the subject's value was not standardised against the cohort"
-    if hit.value_z == 0:
+    direction = hit.observed_direction
+    if direction is None:
+        if hit.value_z is None:
+            return "the subject's value was not standardised against the cohort"
         return "the subject's value sits at the cohort mean (z = +0.00)"
-    level = "elevated" if hit.value_z > 0 else "reduced"
+    level = "elevated" if direction == "up" else "reduced"
     return f"the subject's value is {level} relative to the cohort (z = {hit.value_z:+.2f})"
 
 
@@ -89,6 +91,11 @@ class InstructionFormatter:
 
     # -- grounding -------------------------------------------------------------
 
+    #: Modalities that are inference fallbacks, not assay identities. Filtering
+    #: KB lookups by them would strip annotations from curated features whose
+    #: modality merely could not be inferred from the name.
+    CATCH_ALL_MODALITIES = frozenset({"clinical", "integrated"})
+
     def ground(self, output: Stage1Output, limit: int | None = None) -> list[GroundedHit]:
         hits = output.top_biomarkers[: self.top_n if limit is None else limit]
         return [
@@ -98,14 +105,21 @@ class InstructionFormatter:
                 shap_value=hit.shap_value,
                 pushes_toward_pd=hit.pushes_toward_pd,
                 value_z=hit.value_z,
-                entity=self.kb.lookup(hit.feature, hit.modality),
+                entity=self._lookup(hit.feature, hit.modality),
             )
             for hit in hits
         ]
 
+    def _lookup(self, feature: str, modality: str) -> Entity | None:
+        entity = self.kb.lookup(feature, modality)
+        if entity is None and modality in self.CATCH_ALL_MODALITIES:
+            entity = self.kb.lookup(feature)
+        return entity
+
     # -- shared blocks ---------------------------------------------------------
 
-    def _format_profile(self, output: Stage1Output) -> str:
+    def _format_profile(self, output: Stage1Output,
+                        profile_grounded: list[GroundedHit]) -> str:
         # The recorded diagnosis is deliberately absent: with the label in the
         # prompt, the prediction task is solvable by copying a token, and the
         # trained model learns nothing about reading the evidence.
@@ -120,7 +134,7 @@ class InstructionFormatter:
             "",
             "Top biomarkers by |SHAP| (XGBoost + TreeSHAP):",
         ]
-        for hit in self.ground(output, limit=len(output.top_biomarkers)):
+        for hit in profile_grounded:
             z = "" if hit.value_z is None else f", z={hit.value_z:+.2f}"
             lines.append(
                 f"  - [{hit.modality}] {hit.feature}: SHAP={hit.shap_value:+.3f}"
@@ -158,7 +172,12 @@ class InstructionFormatter:
         """Limitations that are true of this specific subject's evidence."""
         prov = output.provenance
         caveats = []
-        if prov.cohort_size and prov.cohort_size < 100:
+        if not prov.cohort_size:
+            caveats.append(
+                "The cohort size is unreported, so the stability of these feature "
+                "rankings cannot be assessed."
+            )
+        elif prov.cohort_size < 100:
             caveats.append(
                 f"The cohort has {prov.cohort_size} subjects. Feature rankings from a "
                 f"cohort this small are unstable and should be treated as hypothesis-generating."
@@ -211,33 +230,31 @@ class InstructionFormatter:
             )
         return "\n\n".join(sections)
 
-    def _finish(self, task: str, output: Stage1Output, body: list[str]) -> dict:
-        """Assemble the pair, grounding caveats and references over the FULL profile.
+    def _finish(self, task: str, output: Stage1Output, body: list[str],
+                narrated: list[GroundedHit]) -> dict:
+        """Assemble the pair.
 
-        The task bodies discuss only their top-N hits, but the prompt lists every
-        top biomarker. Computing "References: none" or "N features have no curated
-        annotation" from the truncated set produced statements that were false of
-        the profile the model was actually shown.
+        Caveats and references are grounded over the FULL profile — the prompt
+        lists every top biomarker, so "References: none" or "N features have no
+        curated annotation" must be true of what the model was shown. The
+        ``annotated_features`` used by biomarker_recall, in contrast, cover only
+        the ``narrated`` hits the response body actually names; scoring recall
+        against the full profile made the metric's ceiling unreachable even for
+        the reference response itself.
         """
         profile_grounded = self.ground(output, limit=len(output.top_biomarkers))
-        return self._pair(
-            task, output, profile_grounded,
-            self._render(body, self._caveats(output, profile_grounded),
-                         self._references(profile_grounded)),
-        )
-
-    def _pair(self, task: str, output: Stage1Output, grounded: list[GroundedHit],
-              response: str) -> dict:
+        response = self._render(body, self._caveats(output, profile_grounded),
+                                self._references(profile_grounded))
         return {
             "task": task,
             "subject_id": output.subject_id,
             "instruction": self._rng.choice(TASK_INSTRUCTIONS[task]),
-            "input": self._format_profile(output),
+            "input": self._format_profile(output, profile_grounded),
             "output": response,
             "grounding": {
-                "pmids": sorted({p for hit in grounded for p in hit.pmids}, key=int),
-                "annotated_features": [h.feature for h in grounded if h.is_annotated],
-                "unannotated_features": [h.feature for h in grounded if not h.is_annotated],
+                "pmids": sorted({p for hit in profile_grounded for p in hit.pmids}, key=int),
+                "annotated_features": [h.feature for h in narrated if h.is_annotated],
+                "unannotated_features": [h.feature for h in narrated if not h.is_annotated],
                 "synthetic_modalities": list(output.provenance.synthetic_modalities),
             },
         }
@@ -273,7 +290,7 @@ class InstructionFormatter:
                         "here is a statistical association only."
                     )
             body.append("")
-        return self._finish("biomarker_discovery", output, body)
+        return self._finish("biomarker_discovery", output, body, narrated=grounded)
 
     def _concordance_sentence(self, hit: GroundedHit) -> str:
         expected = hit.entity.pd_association.direction
@@ -345,7 +362,7 @@ class InstructionFormatter:
             "To raise confidence: replicate in an independent cohort, confirm the "
             "attributions out of fold, and measure any simulated modality directly."
         )
-        return self._finish("clinical_prediction", output, body)
+        return self._finish("clinical_prediction", output, body, narrated=grounded)
 
     def _evidence_line(self, hit: GroundedHit) -> str:
         base = f"{hit.feature} [{hit.modality}], SHAP {hit.shap_value:+.3f}; {_value_phrase(hit)}"
@@ -364,29 +381,43 @@ class InstructionFormatter:
             "",
         ]
         if len(annotated) >= 2:
-            first, second = annotated[0], annotated[1]
-            agree = first.pushes_toward_pd == second.pushes_toward_pd
-            body.append(
-                f"The two highest-ranked annotated features are {first.feature} "
-                f"[{first.modality}] and {second.feature} [{second.modality}]. They push "
-                + (
-                    "the classification in the same direction"
-                    if agree
-                    else "the classification in opposite directions"
-                )
-                + f" ({_push(first)} PD and {_push(second)} PD respectively)."
+            # A cross-modal claim needs features from DIFFERENT modalities; two
+            # hits from the same assay say nothing about cross-modal agreement.
+            first = annotated[0]
+            second = next(
+                (h for h in annotated[1:] if h.modality != first.modality), None
             )
-            if agree:
+            if second is None:
                 body.append(
-                    "Converging attributions across modalities are harder to explain by a "
-                    "single measurement artefact than a signal confined to one assay, though "
-                    "they can still share an upstream confounder such as medication or age."
+                    f"All {len(annotated)} annotated features come from a single "
+                    f"modality ({first.modality}), so their agreement cannot be read "
+                    f"as cross-modal convergence — a shared assay artefact could "
+                    f"produce it alone."
                 )
             else:
+                agree = first.pushes_toward_pd == second.pushes_toward_pd
                 body.append(
-                    "The modalities disagree here. A cross-modal narrative that ignores the "
-                    "opposing feature would misrepresent the evidence."
+                    f"The highest-ranked annotated features from distinct modalities are "
+                    f"{first.feature} [{first.modality}] and {second.feature} "
+                    f"[{second.modality}]. They push "
+                    + (
+                        "the classification in the same direction"
+                        if agree
+                        else "the classification in opposite directions"
+                    )
+                    + f" ({_push(first)} PD and {_push(second)} PD respectively)."
                 )
+                if agree:
+                    body.append(
+                        "Converging attributions across modalities are harder to explain by a "
+                        "single measurement artefact than a signal confined to one assay, though "
+                        "they can still share an upstream confounder such as medication or age."
+                    )
+                else:
+                    body.append(
+                        "The modalities disagree here. A cross-modal narrative that ignores the "
+                        "opposing feature would misrepresent the evidence."
+                    )
             body.append("")
             body.append("What the literature supports for each:")
             for hit in annotated:
@@ -418,7 +449,7 @@ class InstructionFormatter:
                 + ", ".join(f"{h.feature} [{h.modality}]" for h in unannotated)
                 + "."
             )
-        return self._finish("cross_modal_synthesis", output, body)
+        return self._finish("cross_modal_synthesis", output, body, narrated=grounded)
 
     def all_formats(self, output: Stage1Output) -> list[dict]:
         return [

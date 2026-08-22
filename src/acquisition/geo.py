@@ -33,6 +33,24 @@ class GEOClient:
     def __init__(self, data_dir: str | Path):
         self.data_dir = Path(data_dir)
         ensure_dir(self.data_dir)
+        self._series_cache: dict[str, object] = {}
+
+    def load_series(self, accession: str):
+        """Download (if needed) and parse a GEO series, memoized per client.
+
+        GEOparse re-decompresses and re-parses the whole SOFT family file —
+        platform annotation table included — on every get_GEO call, and one
+        acquire run needs the series in three places.
+        """
+        if accession not in self._series_cache:
+            import GEOparse
+
+            dest = self.data_dir / accession
+            ensure_dir(dest)
+            self._series_cache[accession] = GEOparse.get_GEO(
+                geo=accession, destdir=str(dest), silent=True
+            )
+        return self._series_cache[accession]
 
     def _build_soft_url(self, accession: str) -> str:
         prefix = accession[:6] + "nnn"
@@ -47,18 +65,13 @@ class GEOClient:
 
     def download_study(self, accession: str) -> Path:
         """Download a GEO SOFT file. Returns local directory path."""
-        import GEOparse
-        dest = self.data_dir / accession
-        ensure_dir(dest)
-        GEOparse.get_GEO(geo=accession, destdir=str(dest), silent=True)
-        return dest
+        self.load_series(accession)
+        return self.data_dir / accession
 
     def parse_expression_matrix(self, accession: str) -> pd.DataFrame:
         """Parse downloaded SOFT file into a genes x samples expression matrix."""
-        import GEOparse
         import pandas as pd
-        dest = self.data_dir / accession
-        gse = GEOparse.get_GEO(geo=accession, destdir=str(dest), silent=True)
+        gse = self.load_series(accession)
         frames = []
         for gsm_name, gsm in gse.gsms.items():
             if gsm.table is not None and not gsm.table.empty:
@@ -78,9 +91,7 @@ class GEOClient:
         which no knowledge base can annotate. Probes mapping to several genes
         are dropped rather than arbitrarily assigned to the first one.
         """
-        import GEOparse
-
-        gse = GEOparse.get_GEO(geo=accession, destdir=str(self.data_dir / accession), silent=True)
+        gse = self.load_series(accession)
         mapping: dict[str, str] = {}
         for gpl in gse.gpls.values():
             table = getattr(gpl, "table", None)
@@ -111,6 +122,10 @@ class GEOClient:
         """
         import pandas as pd
 
+        # probe_to_gene stringifies its keys; platforms with all-numeric probe
+        # IDs give pandas an int64 index here, and without matching dtypes the
+        # join would silently map zero probes.
+        expr = expr.set_axis(pd.Index([str(i) for i in expr.index]))
         if not expr.index.is_unique:
             # .loc on a duplicated label returns every matching row, which
             # would misalign the probe->symbol pairing below.

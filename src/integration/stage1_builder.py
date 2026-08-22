@@ -51,6 +51,8 @@ class Stage1Builder:
             )
         z_scores = self._z_scores(X)
         base_provenance = self._provenance(X, fit, provenance)
+        # The feature panel is fixed across subjects; classify each name once.
+        modality_of = {name: self.infer_modality(name) for name in fit.feature_names}
 
         outputs = []
         for i, subject_id in enumerate(X.index):
@@ -61,7 +63,7 @@ class Stage1Builder:
             top_idx = ranked[: self.top_k_biomarkers]
             top_biomarkers = [
                 BiomarkerHit(
-                    modality=self.infer_modality(fit.feature_names[j]),
+                    modality=modality_of[fit.feature_names[j]],
                     feature=fit.feature_names[j],
                     shap_value=float(shap_row[j]),
                     effect=TOWARD_PD if shap_row[j] > 0 else AWAY_FROM_PD,
@@ -87,13 +89,28 @@ class Stage1Builder:
                     disease_stage=stage,
                     top_biomarkers=top_biomarkers,
                     mofa_factors=factors,
-                    environmental_risk_score=float(environmental_scores.get(subject_id, 0.0)),
+                    environmental_risk_score=self._env_score(environmental_scores, subject_id),
                     provenance=base_provenance,
                 )
             )
         return outputs
 
     # -- helpers ---------------------------------------------------------------
+
+    @staticmethod
+    def _env_score(environmental_scores: pd.Series, subject_id) -> float:
+        """A missing exposure score must fail loudly.
+
+        Defaulting to 0.0 would render as a measured "0.0/10" — the lowest
+        exposure on the scale — for a subject whose exposure was never assessed.
+        """
+        value = environmental_scores.get(subject_id)
+        if value is None or pd.isna(value):
+            raise ValueError(
+                f"no environmental risk score for subject {subject_id!r}; refusing "
+                f"to fabricate 0.0 for an unmeasured exposure"
+            )
+        return float(value)
 
     @staticmethod
     def _z_scores(X: pd.DataFrame) -> pd.DataFrame:
@@ -131,10 +148,17 @@ class Stage1Builder:
         name = feature_name.lower()
         if RSID_PATTERN.search(name):
             return "genomics"
-        prefix, _, _ = name.partition(":")
-        for modality, _patterns in MODALITY_PATTERNS:
-            if prefix == modality:
-                return modality
+        prefix, sep, rest = name.partition(":")
+        if sep:
+            # The pipeline namespaces every column; trust the prefix and only
+            # scan the remainder, so 'integrated:factor_1' cannot fall through
+            # to 'clinical' just because the prefix hid the 'factor' stem.
+            if prefix == "integrated":
+                return "integrated"
+            for modality, _patterns in MODALITY_PATTERNS:
+                if prefix == modality:
+                    return modality
+            name = rest
         for modality, patterns in MODALITY_PATTERNS:
             if any(pattern in name for pattern in patterns):
                 return modality

@@ -95,3 +95,14 @@ def test_fewer_than_three_subjects_raises():
     builder = DatasetBuilder(seed=1)
     with pytest.raises(ValueError, match="at least 3 subjects"):
         builder.split(builder.build_pairs(outputs))
+
+
+def test_extreme_fractions_still_yield_nonempty_test():
+    # train 0.1 / val 0.8 passes the constructor; the split must still reserve
+    # at least one subject for test at small n.
+    for n in (3, 4, 5):
+        outputs = [_make_output(f"S_{i}", "PD" if i % 2 else "HC") for i in range(n)]
+        builder = DatasetBuilder(train_frac=0.1, val_frac=0.8, seed=1)
+        splits = builder.split(builder.build_pairs(outputs))
+        assert all(len(v) > 0 for v in splits.values()), (n, {
+            k: len(v) for k, v in splits.items()})

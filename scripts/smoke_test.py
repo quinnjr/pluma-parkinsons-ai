@@ -60,7 +60,11 @@ def summarise(data_root: Path) -> None:
 
     subjects = {split: {r["subject_id"] for r in recs}
                 for split, recs in (("train", train), ("val", val), ("test", test))}
-    overlap = (subjects["train"] & subjects["test"]) | (subjects["train"] & subjects["val"])
+    overlap = (
+        (subjects["train"] & subjects["val"])
+        | (subjects["train"] & subjects["test"])
+        | (subjects["val"] & subjects["test"])
+    )
     if overlap:
         raise AssertionError(f"subject leakage across splits: {sorted(overlap)}")
     log.info("No subject appears in more than one split.")
@@ -72,6 +76,14 @@ def summarise(data_root: Path) -> None:
         len(grounded), len(train),
         len({p for r in train for p in r["grounding"]["pmids"]}),
     )
+    # The simulated modalities carry curated, KB-annotated features by design,
+    # so a run in which NO pair cites a PMID means grounding is broken —
+    # exactly the regression this smoke test exists to catch.
+    if not grounded:
+        raise AssertionError(
+            "no training pair cites a verified PMID; knowledge-base grounding "
+            "is not reaching the generated pairs"
+        )
     if train:
         sample = train[0]
         log.info("\n--- sample pair (%s) ---", sample["task"])

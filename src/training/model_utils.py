@@ -15,9 +15,13 @@ from collections import Counter
 from dataclasses import dataclass
 
 from src.knowledge import KnowledgeBase, load_knowledge_base
+from src.models import VALID_DIAGNOSES
 
 PMID_PATTERN = re.compile(r"PMID:\s*(\d+)", re.IGNORECASE)
 _TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
+#: Case-folded view of the canonical diagnosis vocabulary; a private copy here
+#: would silently fall out of sync when models.VALID_DIAGNOSES grows.
+_DIAGNOSIS_BY_UPPER = {d.upper(): d for d in VALID_DIAGNOSES}
 
 
 @dataclass(frozen=True)
@@ -48,7 +52,7 @@ def audit_citations(text: str, knowledge_base: KnowledgeBase | None = None) -> C
     project exists to prevent.
     """
     kb = knowledge_base or load_knowledge_base()
-    known = {c.pmid for c in kb.citations.values()}
+    known = kb.known_pmids
     cited = tuple(extract_pmids(text))
     supported = tuple(p for p in cited if p in known)
     return CitationAudit(
@@ -85,9 +89,7 @@ def extract_diagnosis(text: str) -> str | None:
     """Recover the diagnosis call from a generated clinical-prediction response."""
     match = re.search(r"model output:\s*([A-Za-z]+)", text or "", re.IGNORECASE)
     if match:
-        candidate = match.group(1).upper()
-        if candidate in {"PD", "HC", "SWEDD", "PRODROMAL"}:
-            return "Prodromal" if candidate == "PRODROMAL" else candidate
+        return _DIAGNOSIS_BY_UPPER.get(match.group(1).upper())
     return None
 
 

@@ -138,7 +138,7 @@ Each uses seeded randomized instruction variants from `templates.py`. Prompts ar
 - **Synthetic-modality label dependence:** `synthetic.py` shifts curated features by diagnosis, so any run with simulated modalities has an inflated CV AUC by construction. The generated text now states this (profile AUC qualifier + always-on caveat); the number itself is still not a performance estimate.
 - **Citation audit scope:** `audit_citations` checks that a cited PMID exists in the KB, not that it is attached to the right entity or claim. Entity-level attachment checking is future work; read `citation_hallucination_rate_micro` together with `responses_with_citations`.
 - **Environmental risk score:** NHANES values are assigned to cohort subjects by position (a distribution, not a measurement); the pipeline flags `environmental` as simulated and the prompt line carries a qualifier, but the score is still a single unqualified float in `Stage1Output`.
-- **`train.py` GPU path untested:** requires `[training]` extras and a GPU; `bf16=True` is hardcoded (pre-Ampere cards will fail). The TRL 1.10 kwargs (`SFTTrainer(quantization_config=...)`, `SFTConfig(max_length/packing/completion_only_loss)`) were verified against TRL 1.10 source, not by execution.
+- **`train.py` GPU path untested:** requires `[training]` extras and a GPU. Training precision now derives from `bnb_4bit_compute_dtype` (set it to `float16` for pre-Ampere cards). The TRL 1.10 kwargs (`SFTTrainer(quantization_config=...)`, `SFTConfig(max_length/packing/completion_only_loss)`, `train_sampling_strategy`) were verified against TRL/transformers source, not by execution.
 
 ## No Relationship to PluMA Plugin Runtime
 

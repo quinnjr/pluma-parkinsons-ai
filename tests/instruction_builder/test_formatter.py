@@ -229,7 +229,13 @@ def test_references_cover_the_full_profile_not_the_task_cutoff(kb):
     assert "References: none" not in pair["output"]
     assert "PMID:1111111" in pair["output"]
     assert "5 of the 6 features listed have no curated" in pair["output"]
-    assert pair["grounding"]["annotated_features"] == ["LRRK2"]
+    # annotated_features covers only the NARRATED hits (top 3 here, all
+    # unannotated) — biomarker_recall scores against what the body names, so
+    # including LRRK2 (ranked 6th, never narrated) would make the reference
+    # response itself unable to reach recall 1.0. The full-profile grounding
+    # still drives the references and caveats asserted above.
+    assert pair["grounding"]["annotated_features"] == []
+    assert pair["grounding"]["pmids"] == ["1111111"]
 
 
 def test_synthetic_caveat_fires_even_when_no_synthetic_feature_ranks(kb):
@@ -273,3 +279,62 @@ def test_instruction_choice_is_seeded(kb, sample_output):
     a = InstructionFormatter(seed=7, knowledge_base=kb).all_formats(sample_output)
     b = InstructionFormatter(seed=7, knowledge_base=kb).all_formats(sample_output)
     assert [p["instruction"] for p in a] == [p["instruction"] for p in b]
+
+
+def test_cross_modal_never_claims_convergence_within_one_modality(kb):
+    # Both annotated hits are microbiome: no cross-modal claim may be made.
+    output = Stage1Output(
+        subject_id="PD_005",
+        diagnosis="PD",
+        prediction_confidence=0.9,
+        disease_stage=None,
+        top_biomarkers=[
+            BiomarkerHit("microbiome", "g__Prevotella", -0.4, "away_from_pd", value_z=-0.5),
+            BiomarkerHit("microbiome", "bug_Prevotella_2", -0.3, "away_from_pd"),
+        ],
+        mofa_factors={},
+        environmental_risk_score=2.0,
+    )
+    formatter = InstructionFormatter(seed=0, knowledge_base=kb)
+    text = formatter.cross_modal_synthesis(output)["output"]
+    assert "Converging attributions across modalities" not in text
+    assert "single modality" in text
+
+
+def test_cross_modal_pairs_first_hit_with_distinct_modality(kb):
+    # Highest annotated hit is microbiome; the partner must skip the second
+    # microbiome hit and pair with the genomics one.
+    output = Stage1Output(
+        subject_id="PD_006",
+        diagnosis="PD",
+        prediction_confidence=0.9,
+        disease_stage=None,
+        top_biomarkers=[
+            BiomarkerHit("microbiome", "g__Prevotella", -0.5, "away_from_pd"),
+            BiomarkerHit("microbiome", "g__Prevotella_b", -0.4, "away_from_pd"),
+            BiomarkerHit("genomics", "LRRK2", 0.3, "toward_pd", value_z=1.0),
+        ],
+        mofa_factors={},
+        environmental_risk_score=2.0,
+    )
+    formatter = InstructionFormatter(seed=0, knowledge_base=kb)
+    text = formatter.cross_modal_synthesis(output)["output"]
+    assert "g__Prevotella [microbiome] and LRRK2 [genomics]" in text
+    assert "opposite directions" in text
+
+
+def test_catch_all_modality_does_not_strip_annotation(kb):
+    # A curated feature whose modality could only be inferred as 'clinical'
+    # (or 'integrated') must still resolve against the KB.
+    output = Stage1Output(
+        subject_id="PD_007",
+        diagnosis="PD",
+        prediction_confidence=0.9,
+        disease_stage=None,
+        top_biomarkers=[BiomarkerHit("clinical", "LRRK2_G2019S", 0.3, "toward_pd")],
+        mofa_factors={},
+        environmental_risk_score=2.0,
+    )
+    formatter = InstructionFormatter(seed=0, knowledge_base=kb)
+    grounded = formatter.ground(output)
+    assert grounded[0].is_annotated
