@@ -117,6 +117,18 @@ Each uses randomized instruction variants from `templates.py`. Prompt format is 
 - **SNF integration:** `src/integration/snf.py` exists and is configured in `integration.yaml`, but is not exercised by the smoke test or pipeline, and has no tests.
 - **`configs/integration.yaml` ensemble:** Describes per-modality base models and a meta-model, but `OmicsEnsemble` is a single `XGBClassifier` on concatenated features (not a stacking ensemble).
 
+## Worktrees
+
+Long-lived feature branches are checked out as linked worktrees under `.worktrees/<name>` (gitignored):
+
+```bash
+git worktree add .worktrees/<name> <branch>   # create
+git worktree remove .worktrees/<name>         # reclaim after merge
+git worktree prune                            # periodic cleanup of stale entries
+```
+
+A branch can only be checked out in one worktree at a time; if `git checkout` reports it is already used by a worktree, remove the worktree first or work inside `.worktrees/<name>` directly.
+
 ## No Relationship to PluMA Plugin Runtime
 
 Despite the "PluMA" branding, this project is a standalone Python package. It does not import or orchestrate any PluMA plugins, and does not follow the PluMA `input()` / `run()` / `output()` plugin contract.
