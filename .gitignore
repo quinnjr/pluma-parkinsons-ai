@@ -1,22 +1,3 @@
-__pycache__/
-*.py[cod]
-.venv*/
-data/raw/
-data/processed/
-data/integrated/
-*.egg-info/
-.pytest_cache/
-.ruff_cache/
-docs/plans/
-*.ckpt
-*.safetensors
-wandb/
-models/
-.env
-.env.*
-*.log
-logs/
-notebooks/.ipynb_checkpoints/
 htmlcov/
 *.bin
 outputs/
@@ -25,3 +6,4 @@ runs/
 # worktree-local symlinks to the shared venv and data store
 .venv
 data
+.worktrees/

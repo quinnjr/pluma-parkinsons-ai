@@ -140,6 +140,18 @@ Each uses seeded randomized instruction variants from `templates.py`. Prompts ar
 - **Environmental risk score:** NHANES values are assigned to cohort subjects by position (a distribution, not a measurement); the pipeline flags `environmental` as simulated and the prompt line carries a qualifier, but the score is still a single unqualified float in `Stage1Output`.
 - **`train.py` GPU path untested:** requires `[training]` extras and a GPU. Training precision now derives from `bnb_4bit_compute_dtype` (set it to `float16` for pre-Ampere cards). The TRL 1.10 kwargs (`SFTTrainer(quantization_config=...)`, `SFTConfig(max_length/packing/completion_only_loss)`, `train_sampling_strategy`) were verified against TRL/transformers source, not by execution.
 
+## Worktrees
+
+Long-lived feature branches are checked out as linked worktrees under `.worktrees/<name>` (gitignored):
+
+```bash
+git worktree add .worktrees/<name> <branch>   # create
+git worktree remove .worktrees/<name>         # reclaim after merge
+git worktree prune                            # periodic cleanup of stale entries
+```
+
+A branch can only be checked out in one worktree at a time; if `git checkout` reports it is already used by a worktree, remove the worktree first or work inside `.worktrees/<name>` directly.
+
 ## No Relationship to PluMA Plugin Runtime
 
 Despite the "PluMA" branding, this project is a standalone Python package. It does not import or orchestrate any PluMA plugins, and does not follow the PluMA `input()` / `run()` / `output()` plugin contract.
