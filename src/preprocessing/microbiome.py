@@ -1,11 +1,15 @@
 from __future__ import annotations
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 
 
 class MicrobiomePreprocessor:
-    def __init__(self, rarefaction_depth: int = 10000):
+    def __init__(self, rarefaction_depth: int = 10000, seed: int = 42):
         self.rarefaction_depth = rarefaction_depth
+        # A dedicated generator keeps rarefaction reproducible; the unseeded
+        # global RNG made otherwise-identical pipeline runs diverge here.
+        self._rng = np.random.default_rng(seed)
 
     def rarefy(self, df: pd.DataFrame) -> pd.DataFrame:
         """Subsample each sample to rarefaction_depth reads."""
@@ -14,7 +18,7 @@ class MicrobiomePreprocessor:
             if total <= self.rarefaction_depth:
                 return row
             proportions = row / total
-            resampled = np.random.multinomial(self.rarefaction_depth, proportions)
+            resampled = self._rng.multinomial(self.rarefaction_depth, proportions)
             return pd.Series(resampled.astype(float), index=row.index)
         return df.apply(_rarefy_row, axis=1)
 

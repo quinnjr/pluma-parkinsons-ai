@@ -4,16 +4,18 @@ mofa:
   convergence_mode: "fast"
   use_gpu: false
 
+# Experimental: SNFIntegrator exists but is not wired into the pipeline.
 snf:
   k_neighbors: 20
   mu: 0.5
   t_iterations: 20
   n_clusters: 4
 
+# OmicsEnsemble: a single XGBClassifier over the concatenated multi-omics
+# feature matrix, with out-of-fold TreeSHAP attributions (see fit_evaluate).
 ensemble:
-  base_models: [xgboost_genomics, xgboost_transcriptomics, xgboost_proteomics,
-                xgboost_metabolomics, xgboost_microbiome, xgboost_environmental,
-                xgboost_epigenomics, xgboost_clinical]
-  meta_model: xgboost
+  n_estimators: 200
+  max_depth: 6
+  learning_rate: 0.05
   cv_folds: 5
-  top_features_per_modality: 20
+  top_k_biomarkers: 20

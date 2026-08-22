@@ -31,14 +31,15 @@ dependencies = [
 
 [project.optional-dependencies]
 training = [
-    "torch>=2.2",
-    "transformers>=4.40,<5.0",
-    "peft>=0.10",
-    "trl>=0.8",
-    "bitsandbytes>=0.43",
-    "datasets>=2.18",
-    "accelerate>=1.0",
-    "evaluate>=0.4",
+    "torch>=2.6",
+    # gemma4_unified checkpoints require transformers 5.10+; 4.x cannot load them.
+    "transformers>=5.10",
+    "peft>=0.20",
+    # SFTConfig/SFTTrainer API used in src/training/train.py landed in trl 1.x.
+    "trl>=1.10",
+    "bitsandbytes>=0.48",
+    "datasets>=4.0",
+    "accelerate>=1.10",
 ]
 dev = [
     "pytest>=8.0",

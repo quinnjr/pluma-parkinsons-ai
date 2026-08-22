@@ -1,12 +1,14 @@
 # PluMA Parkinson's AI — Multi-Omics Training Pipeline
 
-Fine-tunes Mistral Small 4 for Parkinson's disease **biomarker discovery** and **clinical prediction** using integrated multi-omics data from public databases.
+Fine-tunes **Gemma 4** for Parkinson's disease **biomarker discovery** and **clinical prediction** using integrated multi-omics data from public databases, with every generated claim grounded in a curated, PubMed-verified knowledge base.
 
 ## Architecture
 
-**Stage 1 (ML layer):** Downloads and preprocesses 8 omics modalities → MOFA+/SNF integration → XGBoost ensemble + SHAP → per-sample JSON summaries
+**Stage 1 (ML layer):** Downloads and preprocesses omics modalities → MOFA+ latent factors → XGBoost classifier with **out-of-fold** TreeSHAP attributions → per-subject `Stage1Output` JSON summaries carrying full provenance (cohort size, in-sample vs out-of-fold SHAP, simulated modalities, source datasets, CV AUC).
 
-**Stage 2 (LLM layer):** Converts JSON summaries to instruction-response pairs → QLoRA fine-tuning of Mistral Small 4
+**Stage 2 (LLM layer):** Converts `Stage1Output`s to instruction-response pairs grounded in `src/knowledge/` (26 curated entities, 32 PubMed-verified citations) → QLoRA fine-tuning of `google/gemma-4-12B-it`.
+
+Every sentence in a generated response traces to one of exactly three sources: the pipeline's own numbers, a cited knowledge-base claim, or an explicit statement that no curated evidence exists. Features the knowledge base cannot resolve are reported as statistical associations only — never given an invented mechanism.
 
 ## Setup
 
@@ -30,6 +32,8 @@ pip install -e ".[training]"
 | Microbiome | PPMI gut microbiome, EBI Metagenomics, GEO 16S |
 | Environmental | EPA AQS, USGS pesticide maps, CDC NHANES, NIH NTP |
 | Clinical/Phenotypic | PPMI clinical, OpenNeuro, PhysioNet |
+
+Modalities without a real data source in a given run can be simulated (`src/acquisition/synthetic.py`); simulated modalities are recorded in each subject's provenance and called out in the generated text.
 
 ### Data Access Requirements
 
@@ -62,14 +66,35 @@ python -m src.pipeline --stage acquire
 python -m src.pipeline --stage preprocess
 python -m src.pipeline --stage integrate
 
-# Build LLM training data
+# Build LLM training data (subject-level train/val/test split)
 python -m src.pipeline --stage build_instructions
 
-# Stage 2 — QLoRA fine-tuning (requires ≥20GB VRAM)
+# Stage 2 — QLoRA fine-tuning (4-bit NF4; gemma-4-12B-it fits a 24 GB card)
 python -m src.pipeline --stage train
 
 # Full pipeline end-to-end
 python -m src.pipeline --stage all
+
+# Useful flags: --data-root <dir> to relocate all inputs/outputs,
+# --max-subjects N for a reduced run, --acq/pre/int/train-config overrides.
+```
+
+Stages hand off via disk (`<data-root>/{raw,processed,integrated,instructions}`), so each stage can be run and inspected independently.
+
+## Evaluation
+
+```bash
+python -m src.training.evaluate --adapter models/gemma-4-12b-pd-multiomics \
+    --data data/instructions/test.jsonl --limit 50
+# add --base-only to score the un-tuned base model as a baseline
+```
+
+Reported metrics: token F1 against the reference, **citation hallucination rate** (PMIDs cited that the knowledge base does not contain), **biomarker recall** (pipeline-ranked features actually named), and diagnosis accuracy on the prediction task. Exact-match accuracy is deliberately not reported.
+
+To re-verify every knowledge-base citation against PubMed:
+
+```bash
+python -m src.knowledge.verify_citations   # exits 1 on drift
 ```
 
 ## Tests
@@ -83,13 +108,14 @@ python -m src.pipeline --stage all
 ```
 pluma-parkinsons-ai/
 ├── src/
-│   ├── acquisition/          # Database downloaders (PPMI, GEO, EPA, NHANES)
+│   ├── acquisition/          # Database downloaders (PPMI, GEO, EPA, NHANES) + synthetic modalities
 │   ├── preprocessing/        # Per-modality normalizers (8 modalities)
-│   ├── integration/          # MOFA+, SNF, XGBoost ensemble, Stage1Builder
-│   ├── instruction_builder/  # Stage1Output → instruction pairs, JSONL splits
-│   └── training/             # QLoRA training script for Mistral Small 4
+│   ├── integration/          # MOFA+, XGBoost + out-of-fold SHAP, Stage1Builder
+│   ├── knowledge/            # Curated entities + PubMed-verified citations (grounding)
+│   ├── instruction_builder/  # Stage1Output → grounded instruction pairs, JSONL splits
+│   └── training/             # QLoRA fine-tuning (Gemma 4), chat prompts, evaluation
 ├── configs/                  # YAML configs for each pipeline stage
-├── data/                     # Raw → processed → integrated (gitignored)
-├── notebooks/                # EDA and validation notebooks
+├── data/                     # Raw → processed → integrated → instructions (gitignored)
+├── scripts/                  # smoke_test.py — end-to-end run on a small real cohort
 └── tests/                    # Mirror of src/ structure
 ```

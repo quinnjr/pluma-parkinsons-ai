@@ -1,6 +1,9 @@
 from __future__ import annotations
+
 from pathlib import Path
+
 import pandas as pd
+
 from src.acquisition.manifest import SampleManifest
 from src.utils import ensure_dir
 

@@ -1,6 +1,7 @@
 import pytest
-import pandas as pd
+
 from src.acquisition.manifest import SampleManifest
+
 
 def test_manifest_add_and_retrieve():
     m = SampleManifest()

@@ -1,125 +1,175 @@
-"""
-QLoRA fine-tuning for Mistral Small 4 on PD multi-omics instruction data.
+"""QLoRA fine-tuning of Gemma 4 on PD multi-omics instruction data.
 
 Usage:
     python -m src.training.train --config configs/training.yaml \
-        --data_dir data/integrated/instruction_pairs
+        --data_dir data/instructions
 
 Requirements:
     pip install -e ".[training]"
 
 Hardware:
-    Minimum 20GB VRAM (RTX 3090/4090). For multi-GPU, use:
-    accelerate launch -m src.training.train --config configs/training.yaml
+    google/gemma-4-12B-it in 4-bit NF4 needs roughly 12 GB of VRAM for LoRA
+    training at max_length 4096. The 31B dense variant needs ~28 GB. For
+    multi-GPU:
+        accelerate launch -m src.training.train --config configs/training.yaml
+
+Note on the model class: gemma-4-*-it checkpoints are `gemma4_unified`
+(text+vision+audio). Passing the model *id* to SFTTrainer lets TRL instantiate
+the architecture named in the checkpoint config rather than forcing
+AutoModelForCausalLM, and passing a plain tokenizer as `processing_class` keeps
+the run on the text-only path.
 """
 from __future__ import annotations
+
 import argparse
+import logging
 from pathlib import Path
+
+from src.training.prompts import build_messages
 from src.utils import load_config
-from src.training.model_utils import format_prompt
+
+logger = logging.getLogger(__name__)
 
 
-def load_model_and_tokenizer(cfg: dict):
-    """Load Mistral Small 4 with 4-bit NF4 quantization and LoRA adapters."""
+def build_quantization_config(cfg: dict):
+    from transformers import BitsAndBytesConfig
+
+    model_cfg = cfg["model"]
+    if not model_cfg.get("load_in_4bit", True):
+        return None
     import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-    from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
-    bnb_config = BitsAndBytesConfig(
-        load_in_4bit=cfg["model"]["load_in_4bit"],
-        bnb_4bit_quant_type=cfg["model"]["bnb_4bit_quant_type"],
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_use_double_quant=cfg["model"]["use_nested_quant"],
+    return BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type=model_cfg["bnb_4bit_quant_type"],
+        bnb_4bit_compute_dtype=getattr(torch, model_cfg["bnb_4bit_compute_dtype"]),
+        bnb_4bit_use_double_quant=model_cfg["use_nested_quant"],
     )
-    model = AutoModelForCausalLM.from_pretrained(
-        cfg["model"]["name"],
-        quantization_config=bnb_config,
-        device_map="auto",
-        trust_remote_code=True,
+
+
+def build_peft_config(cfg: dict):
+    from peft import LoraConfig
+
+    lora = cfg["lora"]
+    return LoraConfig(
+        r=lora["r"],
+        lora_alpha=lora["lora_alpha"],
+        target_modules=list(lora["target_modules"]),
+        lora_dropout=lora["lora_dropout"],
+        bias=lora["bias"],
+        task_type=lora["task_type"],
     )
-    model = prepare_model_for_kbit_training(model)
 
-    lora_config = LoraConfig(
-        r=cfg["lora"]["r"],
-        lora_alpha=cfg["lora"]["lora_alpha"],
-        target_modules=cfg["lora"]["target_modules"],
-        lora_dropout=cfg["lora"]["lora_dropout"],
-        bias=cfg["lora"]["bias"],
-        task_type=cfg["lora"]["task_type"],
+
+def build_sft_config(cfg: dict):
+    from trl import SFTConfig
+
+    training = cfg["training"]
+    # One dtype knob: the quantization compute dtype drives training precision
+    # too. Hardcoding bf16 alongside a config-driven compute dtype let a user
+    # set float16 for pre-Ampere hardware and still get bf16 training args.
+    compute_dtype = cfg["model"]["bnb_4bit_compute_dtype"]
+    return SFTConfig(
+        output_dir=training["output_dir"],
+        num_train_epochs=training["num_train_epochs"],
+        per_device_train_batch_size=training["per_device_train_batch_size"],
+        gradient_accumulation_steps=training["gradient_accumulation_steps"],
+        learning_rate=training["learning_rate"],
+        warmup_ratio=training["warmup_ratio"],
+        lr_scheduler_type=training["lr_scheduler_type"],
+        save_steps=training["save_steps"],
+        logging_steps=training["logging_steps"],
+        eval_strategy=training.get("eval_strategy", "steps"),
+        eval_steps=training.get("eval_steps", training["save_steps"]),
+        max_length=training["max_length"],
+        packing=training.get("packing", False),
+        # Prompt-completion data: loss on the response only. TRL infers this,
+        # but stating it means a change in TRL's default cannot silently start
+        # training the model to reproduce its own inputs.
+        completion_only_loss=True,
+        gradient_checkpointing=training.get("gradient_checkpointing", True),
+        bf16=compute_dtype == "bfloat16",
+        fp16=compute_dtype == "float16",
+        # Bucket similar-length pairs to cut padding waste (the pre-SFTConfig
+        # trainer had group_by_length=True; the boolean is gone in
+        # transformers >= 5.10, replaced by this strategy field).
+        train_sampling_strategy="group_by_length",
+        report_to=training.get("report_to", "none"),
+        seed=training["seed"],
+        model_init_kwargs={"dtype": compute_dtype},
+        hub_model_id=(cfg.get("hub") or {}).get("hub_model_id"),
     )
-    model = get_peft_model(model, lora_config)
-    model.print_trainable_parameters()
-
-    tokenizer = AutoTokenizer.from_pretrained(
-        cfg["model"]["name"], trust_remote_code=True
-    )
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "right"
-    return model, tokenizer
 
 
-def prepare_dataset(data_dir: str | Path, max_seq_length: int):
-    """Load JSONL splits and apply Alpaca prompt template."""
+def prepare_dataset(data_dir: str | Path):
+    """Load the JSONL splits and convert them to prompt-completion conversations."""
     from datasets import load_dataset
 
     data_dir = Path(data_dir)
-    dataset = load_dataset(
-        "json",
-        data_files={
-            "train": str(data_dir / "train.jsonl"),
-            "validation": str(data_dir / "val.jsonl"),
-        },
-    )
-    return dataset.map(lambda ex: {"text": format_prompt(ex)})
+    files = {"train": data_dir / "train.jsonl", "validation": data_dir / "val.jsonl"}
+    missing = [str(p) for p in files.values() if not p.exists()]
+    if missing:
+        raise FileNotFoundError(
+            f"Missing instruction data: {missing}. Run "
+            f"`python -m src.pipeline --stage build_instructions` first."
+        )
+    dataset = load_dataset("json", data_files={k: str(v) for k, v in files.items()})
+    # Drop the analysis-only columns; SFTTrainer expects prompt/completion alone.
+    return dataset.map(build_messages, remove_columns=dataset["train"].column_names)
 
 
 def train(config_path: str, data_dir: str) -> None:
-    from transformers import TrainingArguments
     from trl import SFTTrainer
 
     cfg = load_config(config_path)
-    model, tokenizer = load_model_and_tokenizer(cfg)
-    dataset = prepare_dataset(data_dir, cfg["training"]["max_seq_length"])
-
-    training_args = TrainingArguments(
-        output_dir=cfg["training"]["output_dir"],
-        num_train_epochs=cfg["training"]["num_train_epochs"],
-        per_device_train_batch_size=cfg["training"]["per_device_train_batch_size"],
-        gradient_accumulation_steps=cfg["training"]["gradient_accumulation_steps"],
-        learning_rate=cfg["training"]["learning_rate"],
-        warmup_ratio=cfg["training"]["warmup_ratio"],
-        lr_scheduler_type=cfg["training"]["lr_scheduler_type"],
-        save_steps=cfg["training"]["save_steps"],
-        logging_steps=cfg["training"]["logging_steps"],
-        bf16=True,
-        fp16=False,
-        group_by_length=True,
-        report_to="none",
-        seed=cfg["training"]["seed"],
+    dataset = prepare_dataset(data_dir)
+    logger.info(
+        "Training on %d pairs, validating on %d",
+        len(dataset["train"]), len(dataset["validation"]),
     )
 
+    tokenizer = _load_tokenizer(cfg)
     trainer = SFTTrainer(
-        model=model,
-        args=training_args,
+        model=cfg["model"]["name"],
+        args=build_sft_config(cfg),
         train_dataset=dataset["train"],
         eval_dataset=dataset["validation"],
-        tokenizer=tokenizer,
-        dataset_text_field="text",
-        max_seq_length=cfg["training"]["max_seq_length"],
-        packing=True,
+        processing_class=tokenizer,
+        quantization_config=build_quantization_config(cfg),
+        peft_config=build_peft_config(cfg),
     )
-
     trainer.train()
     trainer.save_model(cfg["training"]["output_dir"])
+    tokenizer.save_pretrained(cfg["training"]["output_dir"])
 
-    if cfg["hub"].get("push_to_hub"):
-        model.push_to_hub(cfg["hub"]["hub_model_id"])
-        tokenizer.push_to_hub(cfg["hub"]["hub_model_id"])
+    hub_cfg = cfg.get("hub") or {}
+    if hub_cfg.get("push_to_hub"):
+        # The target repo comes from args.hub_model_id (set in build_sft_config);
+        # Trainer.push_to_hub's first positional is the COMMIT MESSAGE, so
+        # passing the repo id there pushed to the wrong repo.
+        trainer.push_to_hub()
+
+
+def _load_tokenizer(cfg: dict, source: str | None = None):
+    """Load the tokenizer from ``source`` (default: the configured base model)."""
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(source or cfg["model"]["name"])
+    # Gemma 4 ships a real <pad> token; falling back to EOS would make the
+    # collator mask genuine end-of-turn tokens out of the loss.
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    return tokenizer
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="QLoRA fine-tuning for PD multi-omics")
+    parser.add_argument("--config", default="configs/training.yaml")
+    parser.add_argument("--data_dir", default="data/instructions")
+    args = parser.parse_args(argv)
+    train(args.config, args.data_dir)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="QLoRA fine-tuning for PD multi-omics")
-    parser.add_argument("--config", default="configs/training.yaml")
-    parser.add_argument("--data_dir", default="data/integrated/instruction_pairs")
-    args = parser.parse_args()
-    train(args.config, args.data_dir)
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    main()

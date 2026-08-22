@@ -1,13 +1,14 @@
 # tests/preprocessing/test_preprocessing_modules.py
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+
+from src.preprocessing.clinical import ClinicalPreprocessor
+from src.preprocessing.environmental_prep import EnvironmentalPreprocessor
 from src.preprocessing.epigenomics import EpigenomicsPreprocessor
-from src.preprocessing.proteomics import ProteomicsPreprocessor
 from src.preprocessing.metabolomics import MetabolomicsPreprocessor
 from src.preprocessing.microbiome import MicrobiomePreprocessor
-from src.preprocessing.environmental_prep import EnvironmentalPreprocessor
-from src.preprocessing.clinical import ClinicalPreprocessor
+from src.preprocessing.proteomics import ProteomicsPreprocessor
+
 
 def test_epigenomics_beta_clamp():
     proc = EpigenomicsPreprocessor()

@@ -1,8 +1,10 @@
 # tests/integration/test_mofa.py
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+
 from src.integration.mofa import MOFAIntegrator
+
 
 @pytest.fixture
 def small_omics():

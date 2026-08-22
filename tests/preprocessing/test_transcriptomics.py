@@ -1,8 +1,10 @@
 # tests/preprocessing/test_transcriptomics.py
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
+
 from src.preprocessing.transcriptomics import TranscriptomicsPreprocessor
+
 
 @pytest.fixture
 def raw_counts():

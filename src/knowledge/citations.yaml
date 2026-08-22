@@ -1,0 +1,199 @@
+# Verified PubMed citations for the PD knowledge base.
+#
+# GENERATED, DO NOT HAND-EDIT PMIDs. Every entry below was resolved against
+# NCBI E-utilities by exact title match (difflib ratio 1.0 against the
+# PubMed record title). Regenerate with:
+#     python -m src.knowledge.verify_citations --check
+
+ALDH1A1_GRUNBLATT:
+  pmid: "15455214"
+  title: "Gene expression profiling of parkinsonian substantia nigra pars compacta; alterations in ubiquitin-proteasome, heat shock protein, iron and oxidative stress regulated proteins, cell adhesion/cellular matrix and vesicle trafficking genes"
+  journal: "J Neural Transm (Vienna)"
+  year: 2004
+  first_author: "Grünblatt E"
+BLOOD_TXN_SCHERZER:
+  pmid: "17215369"
+  title: "Molecular markers of early Parkinson's disease based on gene expression in blood"
+  journal: "Proc Natl Acad Sci U S A"
+  year: 2007
+  first_author: "Scherzer CR"
+BRAAK_STAGING:
+  pmid: "12498954"
+  title: "Staging of brain pathology related to sporadic Parkinson's disease"
+  journal: "Neurobiol Aging"
+  year: 2003
+  first_author: "Braak H"
+CAFFEINE_FUJIMAKI:
+  pmid: "29298852"
+  title: "Serum caffeine and metabolites are reliable biomarkers of early Parkinson disease"
+  journal: "Neurology"
+  year: 2018
+  first_author: "Fujimaki M"
+CAFFEINE_ROSS:
+  pmid: "10819950"
+  title: "Association of coffee and caffeine intake with the risk of Parkinson disease"
+  journal: "JAMA"
+  year: 2000
+  first_author: "Ross GW"
+CSF_ASYN_MOLLENHAUER:
+  pmid: "21317042"
+  title: "α-Synuclein and tau concentrations in cerebrospinal fluid of patients presenting with parkinsonism: a cohort study"
+  journal: "Lancet Neurol"
+  year: 2011
+  first_author: "Mollenhauer B"
+DJ1_BONIFATI:
+  pmid: "12446870"
+  title: "Mutations in the DJ-1 gene associated with autosomal recessive early-onset parkinsonism"
+  journal: "Science"
+  year: 2003
+  first_author: "Bonifati V"
+GBA_SIDRANSKY:
+  pmid: "19846850"
+  title: "Multicenter analysis of glucocerebrosidase mutations in Parkinson's disease"
+  journal: "N Engl J Med"
+  year: 2009
+  first_author: "Sidransky E"
+HOEHNYAHR:
+  pmid: "6067254"
+  title: "Parkinsonism: onset, progression and mortality"
+  journal: "Neurology"
+  year: 1967
+  first_author: "Hoehn MM"
+LEAD_WEISSKOPF:
+  pmid: "20807691"
+  title: "Association of cumulative lead exposure with Parkinson's disease"
+  journal: "Environ Health Perspect"
+  year: 2010
+  first_author: "Weisskopf MG"
+LRRK2_PAISAN:
+  pmid: "15541308"
+  title: "Cloning of the gene containing mutations that cause PARK8-linked Parkinson's disease"
+  journal: "Neuron"
+  year: 2004
+  first_author: "Paisán-Ruíz C"
+LRRK2_ZIMPRICH:
+  pmid: "15541309"
+  title: "Mutations in LRRK2 cause autosomal-dominant parkinsonism with pleomorphic pathology"
+  journal: "Neuron"
+  year: 2004
+  first_author: "Zimprich A"
+MAPT_SIMONSANCHEZ:
+  pmid: "19915575"
+  title: "Genome-wide association study reveals genetic risk underlying Parkinson's disease"
+  journal: "Nat Genet"
+  year: 2009
+  first_author: "Simón-Sánchez J"
+MICROBIOME_HILLBURNS:
+  pmid: "28195358"
+  title: "Parkinson's disease and Parkinson's disease medications have distinct signatures of the gut microbiome"
+  journal: "Mov Disord"
+  year: 2017
+  first_author: "Hill-Burns EM"
+MICROBIOME_SCHEPERJANS:
+  pmid: "25476529"
+  title: "Gut microbiota are related to Parkinson's disease and clinical phenotype"
+  journal: "Mov Disord"
+  year: 2015
+  first_author: "Scheperjans F"
+MOFA_ARGELAGUET:
+  pmid: "32393329"
+  title: "MOFA+: a statistical framework for comprehensive integration of multi-modal single-cell data"
+  journal: "Genome Biol"
+  year: 2020
+  first_author: "Argelaguet R"
+NFL_HANSSON:
+  pmid: "28179466"
+  title: "Blood-based NfL: A biomarker for differential diagnosis of parkinsonian disorder"
+  journal: "Neurology"
+  year: 2017
+  first_author: "Hansson O"
+PD_GWAS_NALLS2019:
+  pmid: "31701892"
+  title: "Identification of novel risk loci, causal insights, and heritable risk for Parkinson's disease: a meta-analysis of genome-wide association studies"
+  journal: "Lancet Neurol"
+  year: 2019
+  first_author: "Nalls MA"
+PESTICIDE_TANNER:
+  pmid: "21269927"
+  title: "Rotenone, paraquat, and Parkinson's disease"
+  journal: "Environ Health Perspect"
+  year: 2011
+  first_author: "Tanner CM"
+PINK1_VALENTE:
+  pmid: "15087508"
+  title: "Hereditary early-onset Parkinson's disease caused by mutations in PINK1"
+  journal: "Science"
+  year: 2004
+  first_author: "Valente EM"
+PPMI_MAREK:
+  pmid: "21930184"
+  title: "The Parkinson Progression Marker Initiative (PPMI)"
+  journal: "Prog Neurobiol"
+  year: 2011
+  first_author: "Parkinson Progression Marker Initiative"
+PRKN_KITADA:
+  pmid: "9560156"
+  title: "Mutations in the parkin gene cause autosomal recessive juvenile parkinsonism"
+  journal: "Nature"
+  year: 1998
+  first_author: "Kitada T"
+SAA_SIDEROWF:
+  pmid: "37059509"
+  title: "Assessment of heterogeneity among participants in the Parkinson's Progression Markers Initiative cohort using α-synuclein seed amplification: a cross-sectional study"
+  journal: "Lancet Neurol"
+  year: 2023
+  first_author: "Siderowf A"
+SCFA_UNGER:
+  pmid: "27591074"
+  title: "Short chain fatty acids and gut microbiota differ between patients with Parkinson's disease and age-matched controls"
+  journal: "Parkinsonism Relat Disord"
+  year: 2016
+  first_author: "Unger MM"
+SHAP_LUNDBERG:
+  pmid: "32607472"
+  title: "From Local Explanations to Global Understanding with Explainable AI for Trees"
+  journal: "Nat Mach Intell"
+  year: 2020
+  first_author: "Lundberg SM"
+SNCA_A53T_POLYMEROPOULOS:
+  pmid: "9197268"
+  title: "Mutation in the alpha-synuclein gene identified in families with Parkinson's disease"
+  journal: "Science"
+  year: 1997
+  first_author: "Polymeropoulos MH"
+SNCA_METH_JOWAED:
+  pmid: "20445061"
+  title: "Methylation regulates alpha-synuclein expression and is decreased in Parkinson's disease patients' brains"
+  journal: "J Neurosci"
+  year: 2010
+  first_author: "Jowaed A"
+SNCA_METH_MATSUMOTO:
+  pmid: "21124796"
+  title: "CpG demethylation enhances alpha-synuclein expression and affects the pathogenesis of Parkinson's disease"
+  journal: "PLoS One"
+  year: 2010
+  first_author: "Matsumoto L"
+SNF_WANG:
+  pmid: "24464287"
+  title: "Similarity network fusion for aggregating data types on a genomic scale"
+  journal: "Nat Methods"
+  year: 2014
+  first_author: "Wang B"
+UPDRS_GOETZ:
+  pmid: "19025984"
+  title: "Movement Disorder Society-sponsored revision of the Unified Parkinson's Disease Rating Scale (MDS-UPDRS): scale presentation and clinimetric testing results"
+  journal: "Mov Disord"
+  year: 2008
+  first_author: "Goetz CG"
+URATE_ASCHERIO:
+  pmid: "19822770"
+  title: "Urate as a predictor of the rate of clinical decline in Parkinson disease"
+  journal: "Arch Neurol"
+  year: 2009
+  first_author: "Ascherio A"
+VPS35_VILARINO:
+  pmid: "21763482"
+  title: "VPS35 mutations in Parkinson disease"
+  journal: "Am J Hum Genet"
+  year: 2011
+  first_author: "Vilariño-Güell C"

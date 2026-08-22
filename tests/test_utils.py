@@ -1,8 +1,8 @@
 # tests/test_utils.py
-import pytest
 import yaml
-from pathlib import Path
-from src.utils import load_config, ensure_dir, save_jsonl, load_jsonl
+
+from src.utils import ensure_dir, load_config, load_jsonl, save_jsonl
+
 
 def test_load_config(tmp_path):
     cfg = {"key": "value", "nested": {"a": 1}}

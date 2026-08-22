@@ -1,5 +1,13 @@
+# QLoRA fine-tuning of Gemma 4.
+#
+# gemma-4-12B-it is the default: 4-bit NF4 fits in ~12 GB of VRAM, leaving room
+# for activations at max_length 4096 on a single 24 GB card. Alternatives:
+#   google/gemma-4-31B-it      dense, ~28 GB in 4-bit
+#   google/gemma-4-26B-A4B-it  MoE, 4B active params
+#   google/gemma-4-E4B-it      edge-sized, for a laptop smoke run
+# The LoRA target modules below are the projection names shared by all of them.
 model:
-  name: "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
+  name: "google/gemma-4-12B-it"
   load_in_4bit: true
   bnb_4bit_compute_dtype: "bfloat16"
   bnb_4bit_quant_type: "nf4"
@@ -8,13 +16,16 @@ model:
 lora:
   r: 32
   lora_alpha: 64
+  # Attention and MLP projections of the language tower. Named by suffix, so the
+  # vision/audio embedder projections in the gemma4_unified checkpoint are not
+  # matched and stay frozen.
   target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
   lora_dropout: 0.05
   bias: none
   task_type: CAUSAL_LM
 
 training:
-  output_dir: "models/mistral-pd-multiomics"
+  output_dir: "models/gemma-4-12b-pd-multiomics"
   num_train_epochs: 3
   per_device_train_batch_size: 2
   gradient_accumulation_steps: 8
@@ -22,11 +33,18 @@ training:
   warmup_ratio: 0.03
   lr_scheduler_type: cosine
   save_steps: 500
+  eval_strategy: steps
+  eval_steps: 100
   logging_steps: 50
-  max_seq_length: 4096
-  dataset_split: [0.8, 0.1, 0.1]
+  max_length: 4096
+  # Packing concatenates unrelated samples into one sequence; without a Flash
+  # Attention variant the boundaries are not masked and samples contaminate one
+  # another. Off by default, and only worth enabling with flash-attn installed.
+  packing: false
+  gradient_checkpointing: true
+  report_to: none
   seed: 42
 
 hub:
   push_to_hub: false
-  hub_model_id: "pluma-parkinsons-ai/mistral-pd-multiomics-qlora"
+  hub_model_id: "pluma-parkinsons-ai/gemma-4-12b-pd-multiomics-qlora"

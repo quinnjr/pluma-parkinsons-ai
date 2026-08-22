@@ -1,8 +1,10 @@
 # tests/acquisition/test_ppmi.py
-import pytest
+
 import pandas as pd
-from pathlib import Path
+import pytest
+
 from src.acquisition.ppmi import PPMIClient
+
 
 def test_client_initializes_with_data_dir(tmp_path):
     client = PPMIClient(data_dir=str(tmp_path))
